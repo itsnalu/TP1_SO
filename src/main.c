@@ -7,14 +7,36 @@ int main(int argc, char *argv[]) {
     
     int fd[2];
     pid_t pid;
-    FILE *entrada = NULL;
-    char origem;
-    char buffer[MAX_CMD_LEN];
-
+    
     // Cria o pipe
     if (pipe(fd) < 0) {
         perror("Erro ao criar pipe");
         exit(EXIT_FAILURE);
+    }
+
+    // Interação com o usuário
+    FILE *entrada = NULL;
+    char origem;
+    
+    printf("Deseja ler comandos do teclado (T) ou de um arquivo (F)? ");
+    scanf(" %c", &origem);
+    getchar(); // Consome '\n'
+
+    if (origem == 'F' || origem == 'f') {
+        char nomeArquivo[128];
+        printf("Digite o nome do arquivo: ");
+        fgets(nomeArquivo, sizeof(nomeArquivo), stdin);
+        nomeArquivo[strcspn(nomeArquivo, "\n")] = '\0';
+
+        entrada = fopen(nomeArquivo, "r");
+        if (!entrada) {
+            perror("Erro ao abrir arquivo");
+            close(fd[1]);
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        entrada = stdin;
+        printf("Digite os comandos (U, I, M), um por linha. Ctrl+D para encerrar:\n");
     }
 
     // Cria processo filho para o gerenciador
@@ -29,36 +51,15 @@ int main(int argc, char *argv[]) {
 
     if (pid == 0) {
         // Filho: processo gerenciador
-        close(fd[1]);            // Fecha extremidade de escrita
-        gerenciador(fd[0]);      // Chama função do gerenciador, lendo de fd[0]
+        close(fd[1]); // Fecha extremidade de escrita
+        gerenciador(fd[0]); // Chama função do gerenciador, lendo de fd[0]
         close(fd[0]);
         exit(EXIT_SUCCESS);
     } else {
         // Pai: processo controle
-        close(fd[0]);            // Fecha extremidade de leitura
+        close(fd[0]); // Fecha extremidade de leitura
 
-        // Escolha da fonte de comandos
-        printf("Deseja ler comandos do teclado (T) ou de um arquivo (F)? ");
-        scanf(" %c", &origem);
-        getchar(); // Consome '\n'
-
-        if (origem == 'F' || origem == 'f') {
-            char nomeArquivo[128];
-            printf("Digite o nome do arquivo: ");
-            fgets(nomeArquivo, sizeof(nomeArquivo), stdin);
-            nomeArquivo[strcspn(nomeArquivo, "\n")] = '\0';
-
-            entrada = fopen(nomeArquivo, "r");
-            if (!entrada) {
-                perror("Erro ao abrir arquivo");
-                close(fd[1]);
-                exit(EXIT_FAILURE);
-            }
-        } else {
-            entrada = stdin;
-            printf("Digite os comandos (U, I, M), um por linha. Ctrl+D para encerrar:\n");
-        }
-
+        char buffer[MAX_CMD_LEN];
         // Leitura e envio de comandos para o gerenciador
         while (fgets(buffer, sizeof(buffer), entrada)) {
             // Remove lixo e valida comando
@@ -68,14 +69,14 @@ int main(int argc, char *argv[]) {
                 printf("Comando inválido: %s\n", buffer);
                 continue;
             }
-            // Adiciona '\n' para separar comandos
-            buffer[strlen(buffer)] = '\n';
-            buffer[strlen(buffer)+1] = '\0';
+
+            strcat(buffer, "\n"); // Garante quebra de linha
 
             if (write(fd[1], buffer, strlen(buffer)) < 0) {
                 perror("Erro ao escrever no pipe");
                 break;
             }
+
             if (buffer[0] == 'M') break;  // Para depois do comando final
         }
 
