@@ -22,7 +22,7 @@ void gerenciador(int fd_read, ProcessoSimulado *processo) {
             continue;
 
         printf("[Gerenciador] Comando recebido: '%s'\n", comando);
-        int i;
+        //int i;
 
         switch (comando[0]) {
             case 'U':
