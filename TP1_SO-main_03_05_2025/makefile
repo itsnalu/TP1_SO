@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Iinclude
 
 # Arquivos fonte com caminho correto
-SRCS = src/main.c src/gerenciador.c src/processo_simulado.c src/processos.c
+SRCS = src/main.c src/processoControle.c src/processoSimulado.c src/processos.c
 
 # Nome do executável
 TARGET = programa

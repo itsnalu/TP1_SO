@@ -1,8 +1,8 @@
 #include "../include/config.h"
 #include "../include/processos.h"
 
-void inicializar_gerenciador(Processos *gerenciador) {
-    gerenciador->num_processos = 0;
+void inicializarGerenciador(Processos *gerenciador) {
+    gerenciador->numProcessos = 0;
     gerenciador->capacidade = MAX_PROCESSOS;
     
     // Aloca memória para o vetor de processos
@@ -13,7 +13,7 @@ void inicializar_gerenciador(Processos *gerenciador) {
     }
 }
 
-ProcessoSimulado* criar_novo_processo() {
+ProcessoSimulado* criarNovoProcesso() {
     ProcessoSimulado *novo_processo = malloc(sizeof(ProcessoSimulado));
     if (novo_processo == NULL) {
         perror("Erro ao alocar memória para o novo processo");
@@ -22,14 +22,14 @@ ProcessoSimulado* criar_novo_processo() {
     
     // Inicialize os valores do processo (por exemplo, setando o contador de programa)
     novo_processo->pc = 0;
-    novo_processo->num_processos = 0;
+    novo_processo->numProcessos = 0;
     // Outras inicializações, conforme necessário
 
     return novo_processo;
 }
 
-void adicionar_processo(Processos *gerenciador, ProcessoSimulado *processo) {
-    if (gerenciador->num_processos == gerenciador->capacidade) {
+void adicionarProcesso(Processos *gerenciador, ProcessoSimulado *processo) {
+    if (gerenciador->numProcessos == gerenciador->capacidade) {
         // Se o vetor de processos estiver cheio, dobra a capacidade
         gerenciador->capacidade *= 2;
 
@@ -43,5 +43,5 @@ void adicionar_processo(Processos *gerenciador, ProcessoSimulado *processo) {
     }
     
     // Adiciona o processo no vetor
-    gerenciador->processos[gerenciador->num_processos++] = processo;
+    gerenciador->processos[gerenciador->numProcessos++] = processo;
 }

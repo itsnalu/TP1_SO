@@ -1,8 +1,8 @@
 #include "../include/config.h"
-#include "../include/gerenciador.h"
-#include "../include/processo_simulado.h"
+#include "../include/processoControle.h"
+#include "../include/processoSimulado.h"
 
-void gerenciador(int fd_read, ProcessoSimulado *processo) {
+void processo_controle(int fd_read, ProcessoSimulado *processo) {
     //printf("\n processos %d \n", processos);
     char comando[MAX_CMD_LEN];
 
@@ -28,7 +28,7 @@ void gerenciador(int fd_read, ProcessoSimulado *processo) {
             case 'U':
                 printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");
                 
-                executar_instrucao(processo);
+                executarInstrucao(processo);
                 
                 break;
 

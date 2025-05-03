@@ -19,12 +19,12 @@ int main(int argc, char *argv[]) {
     FILE *arq_entrada = NULL;
     char origem;
 
-    Processos gerenciador_processos;
-    inicializar_gerenciador(&gerenciador_processos);
+    Processos gerenciadorProcessos;
+    inicializarGerenciador(&gerenciadorProcessos);
 
     // Cria o primeiro processo
-    ProcessoSimulado *processo_inicial = criar_novo_processo();
-    adicionar_processo(&gerenciador_processos, processo_inicial);
+    ProcessoSimulado *processo_inicial = criarNovoProcesso();
+    adicionarProcesso(&gerenciadorProcessos, processo_inicial);
 
     char nomeArquivoInst[128];
     printf("Digite o nome do arquivo que contem as instrucoes: ");
@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    carregar_programa(processo_inicial, arq_entrada);
+    carregarPrograma(processo_inicial, arq_entrada);
     
     printf("Deseja ler comandos do teclado (T) ou de um arquivo (F)? ");
     scanf(" %c", &origem);
