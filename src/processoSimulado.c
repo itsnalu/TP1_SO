@@ -94,7 +94,6 @@ void psCarregarProgramaDeArquivo(ProcessoSimulado_t *p, const char* nome_arquivo
     Instrucao_t nova_inst;
 
     while (fgets(linha, sizeof(linha), arquivo)) {
-        // Ignora linhas vazias ou comentários (simples, começando com '#')
         if (linha[0] == '\n' || linha[0] == '\0' || linha[0] == '#') continue;
 
         memset(&nova_inst, 0, sizeof(Instrucao_t));
@@ -102,10 +101,10 @@ void psCarregarProgramaDeArquivo(ProcessoSimulado_t *p, const char* nome_arquivo
 
         if (itens_lidos < 1) continue;
 
-        if (nova_inst.tipoInstrucaoChar == 'R') { // Instrução 'R' tem formato "R nomearquivo"
-            sscanf(linha, " %*c %s", nova_inst.nome_arquivo_R); // %*c ignora o char já lido
-        } else { // Outras instruções: "X arg1 arg2" ou "X arg1"
-            sscanf(linha, " %*c %d %d", &nova_inst.arg1, &nova_inst.arg2); // sscanf lida com falta de arg2
+        if (nova_inst.tipoInstrucaoChar == 'R') {
+            sscanf(linha, " %*c %s", nova_inst.nome_arquivo_R);
+        } else {
+            sscanf(linha, " %*c %d %d", &nova_inst.arg1, &nova_inst.arg2);
         }
         psInserirInstrucao(&p->listaInstrucoes, nova_inst);
     }
@@ -121,7 +120,7 @@ void psLiberarMemoria(ProcessoSimulado_t *p) {
 void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr) {
     // Checagens iniciais de validade
     if (!p || novo_processo_filho_ptr == NULL) {
-        if (p) p->estado_atual = EST_TERMINADO; // Erro crítico se p existe mas ponteiro de retorno não
+        if (p) p->estado_atual = EST_TERMINADO;
         return;
     }
     *novo_processo_filho_ptr = NULL; // Garante que o ponteiro de retorno está limpo
