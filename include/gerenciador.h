@@ -1,0 +1,30 @@
+#ifndef GERENCIADOR_H
+#define GERENCIADOR_H
+
+#include "config.h"
+#include "processoSimulado.h" // Seu módulo ProcessoSimulado_t
+#include "cpu.h"              // Estrutura CPU_t
+#include "estados.h"          // Estruturas EstadoPronto_t, EstadoBloqueado_t
+
+typedef struct {
+    long tempo_simulacao_global; // Contador global de unidades de tempo da simulação
+
+    CPU_t cpu_sistema; // A unidade de CPU simulada
+
+    // Tabela principal de todos os processos existentes no sistema.
+    ProcessoSimulado_t tabela_de_processos[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA];
+    // Controle de quais slots da tabela_de_processos estão em uso.
+    char slot_tabela_ocupado[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA];
+    int proximo_pid_a_ser_alocado; // Contador para gerar PIDs únicos
+
+    EstadoPronto_t processos_prontos;       // Estrutura para gerenciar processos prontos
+    EstadoBloqueado_t processos_bloqueados; // Estrutura para gerenciar processos bloqueados
+
+    // Campos para cálculo de estatísticas
+    long acumulador_tempo_de_vida_processos_concluidos;
+    int total_processos_concluidos;
+
+} GerenciadorDeProcessos_t;
+
+//A FAZER FUNÇÔES REFERENTES AO GERENCIADOR
+#endif // GERENCIADOR_H

@@ -1,0 +1,35 @@
+# Arquivos e pastas de IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Arquivos de compilação C/C++
+*.o
+*.obj
+*.out
+*.exe
+*.bin
+*.elf
+*.dll
+*.so
+*.a
+*.lib
+
+# Arquivos de log e cache
+*.log
+*.tmp
+*.cache
+
+# Pastas de build
+build/
+Build/
+Bin/
+dist/
+output/
+
+# Outros arquivos temporários
+*.swp
+*.DS_Store
+Thumbs.db
