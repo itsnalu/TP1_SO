@@ -16,13 +16,18 @@ typedef struct {
     FilaProcessos_t fila_geral_bloqueados;
 } EstadoBloqueado_t;
 
+//Estado de execução de um processo
+//typedef struct{
+//} EstadoExecucao_t;
 // Funções para inicializar as estruturas de estado.
 void estadosInicializarProntos(EstadoPronto_t *ep);
 void estadosInicializarBloqueados(EstadoBloqueado_t *eb);
+//void estadosInicializarExecucao(EstadoExecucao_t *ee);
 
 // Funções para liberar a memória alocada pelas filas nos estados.
 void estadosLiberarProntos(EstadoPronto_t *ep);
 void estadosLiberarBloqueados(EstadoBloqueado_t *eb);
+//void estadosLiberarExecucao(EstadoExecucao_t *ee);
 
 // (Protótipos de funções de manipulação, como adicionar/remover processos,
 // seriam implementadas em estados.c e usadas pelo Gerenciador)

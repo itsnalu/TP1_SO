@@ -183,7 +183,7 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
             p->estado_atual = EST_TERMINADO;
             return; // PC não avança, processo encerrou nesta instrução
         case 'F': // Cria um processo filho (fork)
-            {
+            /* {
                 // Cria uma estrutura base para o filho
                 ProcessoSimulado_t *filho = psCriarNovo(
                     -1, // PID será definido pelo Gerenciador
@@ -205,8 +205,27 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
 
                 *novo_processo_filho_ptr = filho; // Retorna o filho para o Gerenciador
                 pc_foi_alterado_por_salto = 1;    // PC do pai foi modificado diretamente
-            }
-            break;
+            } */
+            {
+                pid_t pid_filho = fork();
+                if (pid_filho == -1) {
+                    perror("Erro ao criar processo filho");
+                    p->estado_atual = EST_TERMINADO; // Falha na criação do processo
+                    return;
+                }
+                if (pid_filho == 0) { // Processo filho
+                    p->pid_pai = p->pid; // Define o PID do pai
+                    p->pid = -1; // Define o PID do filho (o gerenciador irá atribuir)
+                    p->pc++; // O filho começa na instrução seguinte a 'F'
+                    printf("[Filho] PID: %d, Pai: %d \n", p->pid, p->pid_pai);
+                } else { // Processo pai
+                    p->pc = (p->pc + 1) + instr.arg1; // O pai avança (PC_atual + 1) + n instruções
+                    printf("[Pai] PID: %d, criou filho PID: %d \n", p->pid, pid_filho);
+                    pc_foi_alterado_por_salto = 1; // PC do pai foi modificado diretamente
+                    return; // Pai retorna e segue execução
+                }
+                break;
+            }   
         case 'R': // Substitui o programa do processo atual
             {
                 psCarregarProgramaDeArquivo(p, instr.nome_arquivo_R);

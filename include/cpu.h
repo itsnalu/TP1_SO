@@ -18,6 +18,8 @@ typedef struct {
     // Incrementado a cada unidade de tempo 'U' que o processo executa.
     int tempo_executado_neste_quantum;
 
+    ProcessoSimulado_t *processo_atual; // Apontador para o processo simulado atualmente na CPU.
+
 } CPU_t;
 
 // Inicializa a CPU para um estado ocioso/padrão.

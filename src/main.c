@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
     inicializarGerenciador(&gerenciadorProcessos);
 
     // Cria o primeiro processo
-    ProcessoSimulado *processo_inicial = criarNovoProcesso();
+    ProcessoSimulado_t *processo_inicial = criarNovoProcesso();
     adicionarProcesso(&gerenciadorProcessos, processo_inicial);
 
     char nomeArquivoInst[128];

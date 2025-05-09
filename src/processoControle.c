@@ -2,7 +2,7 @@
 #include "../include/processoControle.h"
 #include "../include/processoSimulado.h"
 
-void processo_controle(int fd_read, ProcessoSimulado *processo) {
+void processo_controle(int fd_read, ProcessoSimulado_t *processo) {
     //printf("\n processos %d \n", processos);
     char comando[MAX_CMD_LEN];
 

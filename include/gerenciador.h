@@ -27,4 +27,14 @@ typedef struct {
 } GerenciadorDeProcessos_t;
 
 //A FAZER FUNÇÔES REFERENTES AO GERENCIADOR
+// fnção que cria um novo processo simulado
+void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArquivo);
+//função que substitui imagem atual de um processo para uma nova
+void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, char *novaImagem);   
+//função que gerencia estados de processos 
+void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, int novoEstado);
+//função de escalonamento
+void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador);
+//função de troca de contexto
+void trocarContexto(GerenciadorDeProcessos_t *gerenciador); 
 #endif // GERENCIADOR_H

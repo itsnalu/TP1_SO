@@ -53,6 +53,8 @@ typedef struct ProcessoSimulado_s {
     int tempo_restante_bloqueio;    // Unidades de tempo restantes para o bloqueio (instrução 'B')
     int tempo_usado_no_quantum_atual; // Tempo de CPU usado na fatia de tempo corrente
 
+    int numProcessos; // Número de processos filhos criados por este processo
+
 } ProcessoSimulado_t;
 
 // --- Funções de Lista de Instruções (uso interno e para 'F') ---
