@@ -1,10 +1,10 @@
-#include "config.h"
-#include "gerenciador.h" 
+#include "../include/config.h"
+#include "../include/gerenciador.h" 
+#include "../include/processos.h" 
 
 #define MAX_CMD_LEN 100
 
-int main(int argc, char *argv[]) {
-    
+int main(int argc, char *argv[]) {    
     int fd[2];
     pid_t pid;
     
@@ -16,7 +16,30 @@ int main(int argc, char *argv[]) {
 
     // Interação com o usuário
     FILE *entrada = NULL;
+    FILE *arq_entrada = NULL;
     char origem;
+
+    Processos gerenciadorProcessos;
+    inicializarGerenciador(&gerenciadorProcessos);
+
+    // Cria o primeiro processo
+    ProcessoSimulado_t *processo_inicial = criarNovoProcesso();
+    adicionarProcesso(&gerenciadorProcessos, processo_inicial);
+
+    char nomeArquivoInst[128];
+    printf("Digite o nome do arquivo que contem as instrucoes: ");
+    fgets(nomeArquivoInst, sizeof(nomeArquivoInst), stdin);
+    nomeArquivoInst[strcspn(nomeArquivoInst, "\n")] = '\0';
+
+    arq_entrada = fopen(nomeArquivoInst, "r");
+    
+    if (!arq_entrada) {
+        perror("Erro ao abrir arquivo");
+        close(fd[1]);
+        exit(EXIT_FAILURE);
+    }
+
+                                            //carregarPrograma(processo_inicial, arq_entrada);
     
     printf("Deseja ler comandos do teclado (T) ou de um arquivo (F)? ");
     scanf(" %c", &origem);
@@ -29,6 +52,7 @@ int main(int argc, char *argv[]) {
         nomeArquivo[strcspn(nomeArquivo, "\n")] = '\0';
 
         entrada = fopen(nomeArquivo, "r");
+        
         if (!entrada) {
             perror("Erro ao abrir arquivo");
             close(fd[1]);
@@ -36,6 +60,7 @@ int main(int argc, char *argv[]) {
         }
     } else {
         entrada = stdin;
+        
         printf("Digite os comandos (U, I, M), um por linha. Ctrl+D para encerrar:\n");
     }
 
@@ -52,7 +77,7 @@ int main(int argc, char *argv[]) {
     if (pid == 0) {
         // Filho: processo gerenciador
         close(fd[1]); // Fecha extremidade de escrita
-        gerenciador(fd[0]); // Chama função do gerenciador, lendo de fd[0]
+                                            //gerenciador(fd[0], processo_inicial); // Chama função do gerenciador, lendo de fd[0]
         close(fd[0]);
         exit(EXIT_SUCCESS);
     } else {
