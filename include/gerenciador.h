@@ -25,7 +25,6 @@ typedef struct {
     int total_processos_concluidos;
 
 } GerenciadorDeProcessos_t;
-
 //A FAZER FUNÇÔES REFERENTES AO GERENCIADOR
 // fnção que cria um novo processo simulado
 void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArquivo);

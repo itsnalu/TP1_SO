@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "*.csv": "csv (semicolon)",
+        "processosimulado.h": "c",
+        "config.h": "c",
+        "processos.h": "c",
+        "gerenciador.h": "c"
+    }
+}

@@ -9,7 +9,6 @@ void psInicializarListaInstrucoes(ListaInstrucoes_t *lista) {
     lista->primeiro->prox = NULL;
     lista->tamanho = 0;
 }
-
 void psLiberarListaInstrucoes(ListaInstrucoes_t *lista) {
     ApontadorInstrucao_t atual = lista->primeiro;
     ApontadorInstrucao_t temp;
@@ -21,7 +20,6 @@ void psLiberarListaInstrucoes(ListaInstrucoes_t *lista) {
     lista->primeiro = lista->ultimo = NULL;
     lista->tamanho = 0;
 }
-
 void psInserirInstrucao(ListaInstrucoes_t *lista, Instrucao_t inst) {
     lista->ultimo->prox = (ApontadorInstrucao_t)malloc(sizeof(CelulaInstrucao_t));
     if (!lista->ultimo->prox) { perror("malloc lista.ultimo->prox"); exit(EXIT_FAILURE); }
@@ -30,7 +28,6 @@ void psInserirInstrucao(ListaInstrucoes_t *lista, Instrucao_t inst) {
     lista->ultimo->prox = NULL;
     lista->tamanho++;
 }
-
 void psCopiarListaInstrucoes(ListaInstrucoes_t *destino, const ListaInstrucoes_t *origem) {
     if (!origem || !destino) return;
     psInicializarListaInstrucoes(destino); // Limpa e prepara a lista de destino
@@ -40,7 +37,6 @@ void psCopiarListaInstrucoes(ListaInstrucoes_t *destino, const ListaInstrucoes_t
         atual_origem = atual_origem->prox;
     }
 }
-
 // Função auxiliar interna para obter um ponteiro para a instrução no PC atual.
 static Instrucao_t* psObterInstrucaoNoPc(const ProcessoSimulado_t *p) {
     if (!p || p->pc < 0 || p->pc >= p->listaInstrucoes.tamanho) return NULL;
@@ -191,7 +187,6 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
                     p->prioridade, // Filho herda prioridade
                     tempo_global_simulador
                 );
-
                 // Copia o programa e a memória do pai para o filho
                 psCopiarListaInstrucoes(&filho->listaInstrucoes, &p->listaInstrucoes);
                 memcpy(filho->memoria, p->memoria, sizeof(p->memoria));
