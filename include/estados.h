@@ -28,8 +28,9 @@ void estadosInicializarBloqueados(EstadoBloqueado_t *eb);
 void estadosLiberarProntos(EstadoPronto_t *ep);
 void estadosLiberarBloqueados(EstadoBloqueado_t *eb);
 //void estadosLiberarExecucao(EstadoExecucao_t *ee);
-
-// (Protótipos de funções de manipulação, como adicionar/remover processos,
-// seriam implementadas em estados.c e usadas pelo Gerenciador)
-
+ // Funções para manipulação de procesos nos estados
+void estadosAdicionarPronto(EstadoPronto_t *ep, int pid, int prioridade);
+int estadosRemoverPronto(EstadoPronto_t *ep);
+void estadosAdicionarBloqueado(EstadoBloqueado_t *eb, int pid);
+int estadosRemoverBloqueado(EstadoBloqueado_t *eb);
 #endif // ESTADOS_H

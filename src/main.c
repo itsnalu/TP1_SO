@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
 }
 
 /*O QUE TEMOS QUE FAZER (AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA NAO AGUENTO MAIS)
-1.1 Implementar/Completar em include/fila.h e src/fila.c
+1.1 Implementar/Completar em include/fila.h e src/fila.c (OK, mas falta arrumar o main.c)
 
     Definir a estrutura FilaProcessos_t para armazenar PIDs
     Implementar funções para inicializar filas
@@ -109,14 +109,14 @@ int main(int argc, char *argv[]) {
     Implementar funções para remover processos das filas
     Implementar funções para verificar se uma fila está vazia
 
-1.2 Completar em include/cpu.h e src/cpu.c
+1.2 Completar em include/cpu.h e src/cpu.c (OK, mas falta arrumar o main.c)
 
     Definir a estrutura CPU_t com todos os campos necessários
     Implementar funções para inicializar a CPU
     Implementar funções para atualizar registradores da CPU
     Implementar funções para salvar e restaurar o contexto da CPU
 
-1.3 Completar em include/estados.h e src/estados.c
+1.3 Completar em include/estados.h e src/estados.c (OK, mas falta arrumar o main.c)
 
     Implementar funções para gerenciar a estrutura EstadoPronto_t
     Implementar funções para gerenciar a estrutura EstadoBloqueado_t

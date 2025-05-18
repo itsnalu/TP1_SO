@@ -4,6 +4,8 @@
         "processosimulado.h": "c",
         "config.h": "c",
         "processos.h": "c",
-        "gerenciador.h": "c"
+        "gerenciador.h": "c",
+        "estados.h": "c",
+        "fila.h": "c"
     }
 }

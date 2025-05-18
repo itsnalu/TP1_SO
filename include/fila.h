@@ -1,3 +1,11 @@
+/* 1.1 Implementar/Completar em include/fila.h e src/fila.c
+
+    Definir a estrutura FilaProcessos_t para armazenar PIDs
+    Implementar funções para inicializar filas
+    Implementar funções para adicionar processos às filas
+    Implementar funções para remover processos das filas
+    Implementar funções para verificar se uma fila está vazia */
+    
 #ifndef FILA_H
 #define FILA_H
 
