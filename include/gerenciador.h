@@ -5,8 +5,10 @@
 #include "processoSimulado.h" // Seu módulo ProcessoSimulado_t
 #include "cpu.h"              // Estrutura CPU_t
 #include "estados.h"          // Estruturas EstadoPronto_t, EstadoBloqueado_t
+#include "processoImpressao.h"
 
-typedef struct {
+// Estrutura que representa o gerenciador de processos
+struct GerenciadorDeProcessos_s {
     long tempo_simulacao_global; // Contador global de unidades de tempo da simulação
 
     CPU_t cpu_sistema; // A unidade de CPU simulada
@@ -23,10 +25,12 @@ typedef struct {
     // Campos para cálculo de estatísticas
     long acumulador_tempo_de_vida_processos_concluidos;
     int total_processos_concluidos;
+};
 
-} GerenciadorDeProcessos_t;
-//A FAZER FUNÇÔES REFERENTES AO GERENCIADOR
-// fnção que cria um novo processo simulado
+typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
+
+// Funções do gerenciador de processos
+//função que cria um novo processo simulado
 void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArquivo);
 //função que substitui imagem atual de um processo para uma nova
 void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, char *novaImagem);   
@@ -35,5 +39,8 @@ void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, 
 //função de escalonamento
 void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador);
 //função de troca de contexto
-void trocarContexto(GerenciadorDeProcessos_t *gerenciador); 
+void trocarContexto(GerenciadorDeProcessos_t *gerenciador);
+//função principal do gerenciador de processos simulados
+void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_inicial);
+
 #endif // GERENCIADOR_H

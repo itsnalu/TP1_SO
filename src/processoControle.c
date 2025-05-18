@@ -1,25 +1,28 @@
-#include "../include/config.h"
 #include "../include/processoControle.h"
-#include "../include/processoSimulado.h"
+#include "../include/processos.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
 void processo_controle(int fd_read, ProcessoSimulado_t *processo) {
-    //printf("\n processos %d \n", processos);
     char comando[MAX_CMD_LEN];
     FILE *pipe_in = fdopen(fd_read, "r");
+    
     if (!pipe_in) {
         perror("fdopen");
         exit(EXIT_FAILURE);
     }
-    printf("=== Gerenciador de Processos Iniciado ===\n");
-    printf("Aguardando comandos (U, I, M) do processo controle...\n\n");
-
+    
+    printf("=== Processo Controle Iniciado ===\n");
+    printf("Aguardando comandos (U, I, M) do usuário...\n\n");
+    
     while (fgets(comando, sizeof(comando), pipe_in)) {
-        //printf("\n\n\n entrou em while gerenciador \n\n\n");
         comando[strcspn(comando, "\r\n")] = '\0';
-        if (strlen(comando) == 0)
-            continue;
-        printf("[Gerenciador] Comando recebido: '%s'\n", comando);
-        //int i;
+        if (strlen(comando) == 0) continue;
+        
+        printf("[Controle] Comando recebido: '%s'\n", comando);
+        
         switch (comando[0]) {
             case 'U':
                 printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");

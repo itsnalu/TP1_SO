@@ -1,17 +1,21 @@
 #include "../include/config.h"
 #include "../include/gerenciador.h" 
 #include "../include/processos.h" 
-
-#define MAX_CMD_LEN 100
+#include "../include/cpu.h"
+#include "../include/estados.h"
+#include "../include/fila.h"
+#include "../include/processoImpressao.h"
 
 int main(int argc, char *argv[]) {    
     int fd[2];
     pid_t pid;
+    
     // Cria o pipe
     if (pipe(fd) < 0) {
         perror("Erro ao criar pipe");
         exit(EXIT_FAILURE);
     }
+    
     // Interação com o usuário
     FILE *entrada = NULL;
     FILE *arq_entrada = NULL;
@@ -19,6 +23,7 @@ int main(int argc, char *argv[]) {
 
     Processos gerenciadorProcessos;
     inicializarGerenciador(&gerenciadorProcessos);
+    
     // Cria o primeiro processo
     ProcessoSimulado_t *processo_inicial = criarNovoProcesso();
     adicionarProcesso(&gerenciadorProcessos, processo_inicial);
@@ -35,7 +40,9 @@ int main(int argc, char *argv[]) {
         close(fd[1]);
         exit(EXIT_FAILURE);
     }
-    //carregarPrograma(processo_inicial, arq_entrada);
+    
+    psCarregarProgramaDeArquivo(processo_inicial, nomeArquivoInst);
+    
     printf("Deseja ler comandos do teclado (T) ou de um arquivo (F)? ");
     scanf(" %c", &origem);
     getchar(); // Consome '\n'
@@ -57,18 +64,18 @@ int main(int argc, char *argv[]) {
         entrada = stdin;
         printf("Digite os comandos (U, I, M), um por linha. Ctrl+D para encerrar:\n");
     }
+    
     // Cria processo filho para o gerenciador
     pid = fork();
     if (pid < 0) {
         perror("Erro ao criar processo gerenciador");
         exit(EXIT_FAILURE);
     }
-    // Processo pai: lê comandos da entrada, escreve no pipe
-    // Processo filho: lê do pipe, trata os comandos (U, I, M)    
+    
     if (pid == 0) {
         // Filho: processo gerenciador
         close(fd[1]); // Fecha extremidade de escrita
-        //gerenciador(fd[0], processo_inicial); // Chama função do gerenciador, lendo de fd[0]
+        gerenciadorProcessosSimulados(fd[0], processo_inicial); // Chama função do gerenciador, lendo de fd[0]
         close(fd[0]);
         exit(EXIT_SUCCESS);
     } else {
@@ -92,11 +99,13 @@ int main(int argc, char *argv[]) {
             }
             if (buffer[0] == 'M') break;  // Para depois do comando final
         }
+        
         // Finaliza
         close(fd[1]);
         if (entrada != stdin) fclose(entrada);
         wait(NULL);  // Espera gerenciador encerrar
     }
+    
     return 0;
 }
 

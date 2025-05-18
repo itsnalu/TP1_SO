@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 //função para criar um novo processo
 void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArquivo){
@@ -131,20 +132,66 @@ void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, 
     printf("Processo %d escalonado para execução.\n", pid);
 }
 //Função de escalonamento de processos
-void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador){
-    //Obtém o próximo pronto para execução
-    int pid = obterProximoProcesso(&gerenciador->processos_prontos);
-    //verifica se há processos prontos
-    if (pid == -1) {
-        printf("Nenhum processo pronto para execução.\n");
+void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
+    // Se há um processo em execução, verifica se precisa ser reinserido na fila de prontos
+    if (gerenciador->cpu_sistema.processo_atual) {
+        ProcessoSimulado_t *processo_atual = gerenciador->cpu_sistema.processo_atual;
+        
+        // Se o processo não está bloqueado ou terminado, reinsere na fila de prontos
+        if (processo_atual->estado_atual != EST_BLOQUEADO && 
+            processo_atual->estado_atual != EST_TERMINADO) {
+            processo_atual->estado_atual = EST_PRONTO;
+            estadosAdicionarPronto(&gerenciador->processos_prontos, 
+                                 processo_atual->pid, 
+                                 processo_atual->prioridade);
+            printf("[Gerenciador] Processo %d reinserido na fila de prontos (Prioridade: %d)\n",
+                   processo_atual->pid, processo_atual->prioridade);
+        }
+    }
+    
+    // Tenta obter o próximo processo da fila de prontos
+    int proximo_pid = estadosRemoverPronto(&gerenciador->processos_prontos);
+    
+    if (proximo_pid == -1) {
+        // Não há processos prontos
+        gerenciador->cpu_sistema.processo_atual = NULL;
+        gerenciador->cpu_sistema.indice_processo_na_tabela = CPU_OCIOSA;
+        printf("[Gerenciador] Nenhum processo pronto para execução\n");
         return;
     }
-    //Define o processo como atual na CPU e altera seu estado para EXECUCAO
-    ProcessoSimulado_t *processo = &gerenciador->tabela_de_processos[pid];
-    gerenciador->cpu_sistema.processo_atual = processo;
-    processo->estado_atual = EST_EXECUCAO;
-    printf("Processo %d escalonado para execução.\n", pid);
-}   
+    
+    // Encontra o processo na tabela de processos
+    ProcessoSimulado_t *proximo_processo = &gerenciador->tabela_de_processos[proximo_pid];
+    
+    // Atualiza o estado do processo para execução
+    proximo_processo->estado_atual = EST_EXECUCAO;
+    
+    // Atualiza a CPU com o novo processo
+    gerenciador->cpu_sistema.processo_atual = proximo_processo;
+    gerenciador->cpu_sistema.indice_processo_na_tabela = proximo_pid;
+    gerenciador->cpu_sistema.pc_registrador_cpu = proximo_processo->pc;
+    
+    // Define o quantum baseado na prioridade
+    switch (proximo_processo->prioridade) {
+        case 0:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_0;
+            break;
+        case 1:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_1;
+            break;
+        case 2:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_2;
+            break;
+        default:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_0;
+    }
+    
+    gerenciador->cpu_sistema.tempo_executado_neste_quantum = 0;
+    
+    printf("[Gerenciador] Processo %d escalonado para execução (PC=%d, Prioridade=%d, Quantum=%d)\n",
+           proximo_processo->pid, proximo_processo->pc, proximo_processo->prioridade,
+           gerenciador->cpu_sistema.quantum_total_alocado);
+}
 // Função para realizar a troca de contexto entre processos
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
     // ========================= TESTAR E CONFERIR =========================
@@ -159,11 +206,11 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
         if(cpu->processo_atual->estado_atual == EST_EXECUCAO){
             cpu->processo_atual->estado_atual = EST_PRONTO;
             // reinsere na fila de prontos
-            adicionar_processo_em_pronto(&gerenciador->processos_prontos, cpu->indice_processo_na_tabela);
+            estadosAdicionarPronto(&gerenciador->processos_prontos, cpu->indice_processo_na_tabela, cpu->processo_atual->prioridade);
         }
     }
     // seleciona o próximo processo pronto
-    int novo_pid = remover_proximo_processo_pronto(&gerenciador->processos_prontos);
+    int novo_pid = estadosRemoverPronto(&gerenciador->processos_prontos);
     // caso não haja processo pronto, deixa a CPU ociosa
     if (novo_pid == -1) {
         cpu->indice_processo_na_tabela = -1;
@@ -177,7 +224,7 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
     ProcessoSimulado_t *novo_processo = &gerenciador->tabela_de_processos[novo_pid];
     cpu->indice_processo_na_tabela = novo_pid;
     cpu->pc_registrador_cpu = novo_processo->pc;
-    cpu->quantum_total_alocado = "QUANTUM_PADRAO";
+    cpu->quantum_total_alocado = QUANTUM_PRIORIDADE_0; // Usa o quantum da prioridade mais alta
     cpu->tempo_executado_neste_quantum = 0;
     cpu->processo_atual = novo_processo;
     // atualiza estado do processo
@@ -186,4 +233,151 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
     if(novo_processo->tempo_chegada_sistema == -1){
         novo_processo->tempo_chegada_sistema = gerenciador->tempo_simulacao_global;
     }
+}
+
+// Função auxiliar para executar uma unidade de tempo
+static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
+    printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");
+
+    // Executa próxima instrução do processo atual
+    if (gerenciador->cpu_sistema.processo_atual) {
+        ProcessoSimulado_t *novo_filho = NULL;
+        ProcessoSimulado_t *processo_atual = gerenciador->cpu_sistema.processo_atual;
+        
+        printf("[DEBUG] Executando instrução para processo %d (PC=%d)\n", 
+               processo_atual->pid, processo_atual->pc);
+        
+        psExecutarProximaInstrucao(processo_atual, 
+                                 gerenciador->tempo_simulacao_global,
+                                 &novo_filho);
+        
+        // Se um novo processo filho foi criado, adiciona-o ao gerenciador
+        if (novo_filho) {
+            // Encontra um slot livre na tabela de processos
+            int slot_livre = -1;
+            for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
+                if (!gerenciador->slot_tabela_ocupado[i]) {
+                    slot_livre = i;
+                    break;
+                }
+            }
+            
+            if (slot_livre != -1) {
+                // Copia o processo filho para a tabela
+                gerenciador->tabela_de_processos[slot_livre] = *novo_filho;
+                gerenciador->slot_tabela_ocupado[slot_livre] = 1;
+                novo_filho->pid = slot_livre;
+                
+                // Adiciona à fila de prontos
+                estadosAdicionarPronto(&gerenciador->processos_prontos, 
+                                     novo_filho->pid, 
+                                     novo_filho->prioridade);
+                printf("[Gerenciador] Novo processo filho %d adicionado à fila de prontos\n", novo_filho->pid);
+            } else {
+                printf("[Gerenciador] Erro: Não há slots livres para o processo filho\n");
+                psLiberarMemoria(novo_filho);
+            }
+        }
+        
+        // Incrementa o tempo de CPU usado pelo processo atual
+        processo_atual->tempo_total_cpu_usado++;
+    }
+    
+    // Incrementa o tempo global
+    gerenciador->tempo_simulacao_global++;
+    
+    // Realiza o escalonamento
+    escalonarProcessos(gerenciador);
+}
+
+// Função auxiliar para imprimir estado atual
+static void imprimirEstadoAtual(GerenciadorDeProcessos_t *gerenciador) {
+    printf("[Gerenciador] I → solicitada impressão do estado atual. Disparando processo impressão...\n");
+    // Cria um novo processo para impressão
+    pid_t pid_impressao = fork();
+    if (pid_impressao == 0) {
+        // Processo filho (impressão)
+        processoImpressaoIniciar(gerenciador, 0); // 0 = impressão normal
+        exit(EXIT_SUCCESS);
+    }
+    // Processo pai (gerenciador) continua
+    waitpid(pid_impressao, NULL, 0);
+}
+
+// Função auxiliar para imprimir estatísticas finais
+static void imprimirEstatisticasFinais(GerenciadorDeProcessos_t *gerenciador) {
+    printf("[Gerenciador] M → impressão final e encerramento do simulador.\n");
+    // Cria um novo processo para impressão final
+    pid_t pid_impressao_final = fork();
+    if (pid_impressao_final == 0) {
+        // Processo filho (impressão final)
+        ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
+        impressao->gerenciador = gerenciador;
+        impressao->tipo_impressao = 1; // 1 = impressão final
+        processoImpressaoImprimirEstatisticas(impressao);
+        processoImpressaoFinalizar(impressao);
+    }
+    // Processo pai (gerenciador) espera a impressão terminar
+    waitpid(pid_impressao_final, NULL, 0);
+    printf("=== Simulador encerrado com sucesso ===\n");
+}
+
+// Função principal do gerenciador de processos simulados
+void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_inicial) {
+    char comando[MAX_CMD_LEN];
+    FILE *pipe_in = fdopen(fd_read, "r");
+    
+    if (!pipe_in) {
+        perror("fdopen");
+        exit(EXIT_FAILURE);
+    }
+    
+    // Inicializa as estruturas do gerenciador
+    GerenciadorDeProcessos_t gerenciador;
+    memset(&gerenciador, 0, sizeof(GerenciadorDeProcessos_t));
+    
+    // Inicializa a CPU
+    cpuInicializar(&gerenciador.cpu_sistema);
+    
+    // Inicializa os estados
+    estadosInicializarProntos(&gerenciador.processos_prontos);
+    estadosInicializarBloqueados(&gerenciador.processos_bloqueados);
+    
+    // Copia o processo inicial para a tabela do gerenciador
+    gerenciador.tabela_de_processos[0] = *processo_inicial;
+    gerenciador.slot_tabela_ocupado[0] = 1;
+    
+    // Adiciona o processo inicial à fila de prontos
+    estadosAdicionarPronto(&gerenciador.processos_prontos, processo_inicial->pid, processo_inicial->prioridade);
+    
+    printf("=== Gerenciador de Processos Iniciado ===\n");
+    printf("Aguardando comandos (U, I, M) do processo controle...\n\n");
+    
+    while (fgets(comando, sizeof(comando), pipe_in)) {
+        comando[strcspn(comando, "\r\n")] = '\0';
+        if (strlen(comando) == 0) continue;
+        
+        printf("[Gerenciador] Comando recebido: '%s'\n", comando);
+        
+        switch (comando[0]) {
+            case 'U':
+                executarUnidadeTempo(&gerenciador);
+                break;
+                
+            case 'I':
+                imprimirEstadoAtual(&gerenciador);
+                break;
+                
+            case 'M':
+                imprimirEstatisticasFinais(&gerenciador);
+                fclose(pipe_in);
+                return;
+                
+            default:
+                printf("[Gerenciador] Comando inválido: '%s'\n", comando);
+                break;
+        }
+    }
+    
+    fclose(pipe_in);
 }

@@ -21,6 +21,7 @@ typedef struct {
     //Olhar se é uma representação de um estadoem execução, se nn, implementar isso em estados .c e .h
 
 } CPU_t;
+
 // Inicializa a CPU para um estado ocioso/padrão.
 void cpuInicializar(CPU_t *cpu);
 // Atualiza os registradores da CPU com os valores do processo atual.

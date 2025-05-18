@@ -6,7 +6,7 @@
     Implementar funções para salvar e restaurar o contexto da CPU */
 
 #include "cpu.h"
-
+#include "estados.h"
 
 void cpuInicializar(CPU_t *cpu){
     cpu->indice_processo_na_tabela = CPU_OCIOSA; // Inicializa como ociosa
