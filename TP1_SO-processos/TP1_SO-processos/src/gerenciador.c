@@ -85,7 +85,6 @@ void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArqu
     gerenciador->slot_tabela_ocupado[pid] = 1;
     printf("Processo criado com PID %d a partir do arquivo %s.\n", pid, nomeArquivo);
 }
-
 //função paa substituir a imagem atual de um processo para uma nova
 void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, char *novaImagem){
     // ========================= TESTAR E CONFERIR =========================
@@ -119,7 +118,6 @@ void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, ch
         printf("Imagem do processo %d substituída com sucesso.\n", pid);
     }
 }
-
 //Gerenciar a transição de estados de um processo
 void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, int novoEstado){
     //Verifica se o PID é válido e se o processo existe
@@ -133,11 +131,10 @@ void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, 
     processo->estado_atual = EST_EXECUCAO;
     printf("Processo %d escalonado para execução.\n", pid);
 }
-
 //Função de escalonamento de processos
 void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
     // Se há um processo em execução, verifica se precisa ser reinserido na fila de prontos
-    if (gerenciador->cpu_sistema.processo_atual) {
+    if (gerenciador->cpu_sistema.indice_processo_na_tabela != CPU_OCIOSA){
         ProcessoSimulado_t *processo_atual = gerenciador->cpu_sistema.processo_atual;
         
         // Se o processo não está bloqueado ou terminado, reinsere na fila de prontos
@@ -147,8 +144,8 @@ void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
             estadosAdicionarPronto(&gerenciador->processos_prontos, 
                                  processo_atual->pid, 
                                  processo_atual->prioridade);
-            printf("[Gerenciador] Processo %d reinserido na fila de prontos (Prioridade: %d)\n",
-                   processo_atual->pid, processo_atual->prioridade);
+            /*printf("[Gerenciador] Processo %d reinserido na fila de prontos (Prioridade: %d)\n",
+                   processo_atual->pid, processo_atual->prioridade);*/
         }
     }
     
@@ -191,56 +188,10 @@ void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
     
     gerenciador->cpu_sistema.tempo_executado_neste_quantum = 0;
     
-    printf("[Gerenciador] Processo %d escalonado para execução (PC=%d, Prioridade=%d, Quantum=%d)\n",
+    printf("[Gerenciador] Processo %d escalonado para execução (PC=%d, Prioridade=%d, Quantum=%d)\n\n",
            proximo_processo->pid, proximo_processo->pc, proximo_processo->prioridade,
            gerenciador->cpu_sistema.quantum_total_alocado);
 }
-
-// Funcao de escalonamento de processos usando FIFO
-void escalonarProcessosFIFO(GerenciadorDeProcessos_t *gerenciador){
-    // Se há um processo em execução, verifica se ele deve ser reinserido na fila
-    if(gerenciador->cpu_sistema.processo_atual){
-        ProcessoSimulado_t *processo_atual = gerenciador->cpu_sistema.processo_atual;
-
-        if(processo_atual->estado_atual != EST_BLOQUEADO && 
-            processo_atual->estado_atual != EST_TERMINADO){
-            processo_atual->estado_atual = EST_PRONTO;
-            estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, processo_atual->pid);
-            printf("[FIFO] Processo %d reinserido na fila FIFO\n", processo_atual->pid);
-        }
-    }
-
-    // Obtem o próximo processo da fila FIFO
-    int proximo_pid = estadosRemoverProntoFIFO(&gerenciador->processos_prontos);
-    
-    if(proximo_pid == -1){
-        // Nenhum processo pronto
-        gerenciador->cpu_sistema.processo_atual = NULL;
-        gerenciador->cpu_sistema.indice_processo_na_tabela = CPU_OCIOSA;
-        printf("[FIFO] Nenhum processo pronto para execução\n");
-        return;
-    }
-
-    // Aponta para o processo selecionado
-    ProcessoSimulado_t *proximo_processo = &gerenciador->tabela_de_processos[proximo_pid];
-    
-    proximo_processo->estado_atual = EST_EXECUCAO;
-
-    gerenciador->cpu_sistema.processo_atual = proximo_processo;
-    gerenciador->cpu_sistema.indice_processo_na_tabela = proximo_pid;
-    gerenciador->cpu_sistema.pc_registrador_cpu = proximo_processo->pc;
-
-    // FIFO nao usa quantum, entao zera os campos relacionados a quantum
-    gerenciador->cpu_sistema.quantum_total_alocado = 0; 
-    // defina uma constante como 100, por ex.
-    gerenciador->cpu_sistema.tempo_executado_neste_quantum = 0;
-
-    printf("[FIFO] Processo %d escalonado (PC=%d, Quantum=%d)\n",
-           proximo_processo->pid,
-           proximo_processo->pc,
-           gerenciador->cpu_sistema.quantum_total_alocado);
-}
-
 // Função para realizar a troca de contexto entre processos
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
     // ========================= TESTAR E CONFERIR =========================
@@ -286,7 +237,8 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
 
 // Função auxiliar para executar uma unidade de tempo
 static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
-    printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");
+    //printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");
+    printf("[Gerenciador] U → fim de unidade de tempo.\n");
 
     // Executa próxima instrução do processo atual
     if (gerenciador->cpu_sistema.processo_atual) {
@@ -341,7 +293,8 @@ static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
 
 // Função auxiliar para imprimir estado atual
 static void imprimirEstadoAtual(GerenciadorDeProcessos_t *gerenciador) {
-    printf("[Gerenciador] I → solicitada impressão do estado atual. Disparando processo impressão...\n");
+    //printf("[Gerenciador] I → solicitada impressão do estado atual. Disparando processo impressão...\n");
+    printf("[Gerenciador] I → solicitada impressão do estado atual.\n");
     // Cria um novo processo para impressão
     pid_t pid_impressao = fork();
     if (pid_impressao == 0) {
@@ -406,7 +359,7 @@ void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_ini
         comando[strcspn(comando, "\r\n")] = '\0';
         if (strlen(comando) == 0) continue;
         
-        printf("[Gerenciador] Comando recebido: '%s'\n", comando);
+        //printf("[Gerenciador] Comando recebido: '%s'\n", comando);
         
         switch (comando[0]) {
             case 'U':
@@ -430,4 +383,3 @@ void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_ini
     
     fclose(pipe_in);
 }
-

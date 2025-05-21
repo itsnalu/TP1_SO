@@ -38,8 +38,6 @@ void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, ch
 void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, int novoEstado);
 //função de escalonamento
 void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador);
-
-
 //função de troca de contexto
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador);
 //função principal do gerenciador de processos simulados

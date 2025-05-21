@@ -6,7 +6,7 @@
 #include "../include/fila.h"
 #include "../include/processoImpressao.h"
 
-int main(int argc, char *argv[]) {    
+int main(int argc, char *argv[]) {
     int fd[2];
     pid_t pid;
     
@@ -189,6 +189,5 @@ Arquivos de Teste,
     Criar arquivo init para o primeiro processo simulado
     Criar arquivos para teste da instrução R (ex: file_a, file_b, etc.)
     Criar arquivo de comandos para teste automatizado
-
 
 */

@@ -8,7 +8,6 @@
 // Utiliza múltiplas filas, uma para cada nível de prioridade.
 typedef struct {
     FilaProcessos_t filas_por_prioridade[NUM_NIVEIS_PRIORIDADE];
-    FilaProcessos_t fila_fifo; // para escalonador FIFO
 } EstadoPronto_t;
 
 // Representa o conjunto de processos no estado BLOQUEADO.

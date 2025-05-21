@@ -53,7 +53,7 @@ void psCopiarListaInstrucoes(ListaInstrucoes_t *destino, const ListaInstrucoes_t
     
     printf("[DEBUG] Lista copiada com sucesso (tamanho destino: %d)\n", destino->tamanho);
 }
-// Função auxiliar interna para obter um ponteiro para a instrução no PC atual.
+// --- Função auxiliar interna para obter um ponteiro para a instrução no PC atual      ---
 static Instrucao_t* psObterInstrucaoNoPc(const ProcessoSimulado_t *p) {
     if (!p || p->pc < 0 || p->pc >= p->listaInstrucoes.tamanho) return NULL;
     ApontadorInstrucao_t atual = p->listaInstrucoes.primeiro->prox;
@@ -62,8 +62,7 @@ static Instrucao_t* psObterInstrucaoNoPc(const ProcessoSimulado_t *p) {
     }
     return (atual ? &(atual->instrucao) : NULL);
 }
-
-// --- Implementação Funções Principais do Processo Simulado ---
+// --- Implementação Funções Principais do Processo Simulado                            ---
 ProcessoSimulado_t* psCriarNovo(int pid_sugerido, int pid_pai, int prioridade_inicial, long tempo_criacao) {
     ProcessoSimulado_t *p = (ProcessoSimulado_t*)malloc(sizeof(ProcessoSimulado_t));
     if (!p) { perror("malloc ProcessoSimulado_t"); exit(EXIT_FAILURE); }
@@ -142,10 +141,12 @@ void psLiberarMemoria(ProcessoSimulado_t *p) {
 }
 
 void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr) {
-    printf("[DEBUG] Iniciando execução de instrução para PID %d\n", p->pid);
+    /*printf("[DEBUG] Iniciando execução de instrução para PID %d\n", p->pid);
     printf("[DEBUG] Estado atual: %d\n", p->estado_atual);
     printf("[DEBUG] PC atual: %d\n", p->pc);
-    printf("[DEBUG] Total de instruções: %d\n", p->listaInstrucoes.tamanho);
+    printf("[DEBUG] Total de instruções: %d\n", p->listaInstrucoes.tamanho);*/
+
+    printf("[DEBUG] PID: %d - Estado atual: %d - PC atual: %d - Total de instruções: %d\n", p->pid, p->estado_atual, p->pc, p->listaInstrucoes.tamanho);
     
     // Checagens iniciais de validade
     if (!p || novo_processo_filho_ptr == NULL) {
@@ -292,7 +293,7 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
     // Avança o PC se não foi uma instrução de salto e o processo continua em execução
     if (!pc_foi_alterado_por_salto && p->estado_atual == EST_EXECUCAO) {
         p->pc++;
-        printf("[DEBUG] PC incrementado para %d\n", p->pc);
+        //printf("[DEBUG] PC incrementado para %d\n", p->pc);
     }
 }
 

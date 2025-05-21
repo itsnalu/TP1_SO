@@ -24,16 +24,18 @@ void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_im
 }
 
 void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
-    printf("\n=== Estado Atual do Sistema ===\n");
+    printf("=== Estado Atual do Sistema ===\n");
     printf("Tempo Global: %ld\n", impressao->gerenciador->tempo_simulacao_global);
     
     // Imprime estado da CPU
-    printf("\nCPU:\n");
+    printf("CPU:\n");
     if (impressao->gerenciador->cpu_sistema.processo_atual) {
-        printf("  Processo Atual: PID %d\n", impressao->gerenciador->cpu_sistema.processo_atual->pid);
-        printf("  PC: %d\n", impressao->gerenciador->cpu_sistema.pc_registrador_cpu);
-        printf("  Quantum Total: %d\n", impressao->gerenciador->cpu_sistema.quantum_total_alocado);
-        printf("  Tempo Executado: %d\n", impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
+        printf("  Processo Atual \t PC \t Quantum Total \t Tempo Executado \n");
+        printf("  %d \t\t\t %d \t %d \t\t %d", impressao->gerenciador->cpu_sistema.processo_atual->pid, impressao->gerenciador->cpu_sistema.pc_registrador_cpu, impressao->gerenciador->cpu_sistema.quantum_total_alocado, impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
+        //printf("  Processo Atual: PID %d\n", impressao->gerenciador->cpu_sistema.processo_atual->pid);
+        //printf("  PC: %d\n", impressao->gerenciador->cpu_sistema.pc_registrador_cpu);
+        //printf("  Quantum Total: %d\n", impressao->gerenciador->cpu_sistema.quantum_total_alocado);
+        //printf("  Tempo Executado: %d\n", impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
     } else {
         printf("  CPU Ociosa\n");
     }
@@ -78,7 +80,7 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
 }
 
 void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
-    printf("\n=== Estatísticas Finais ===\n");
+    printf("=== Estatísticas Finais ===\n");
     printf("Tempo Total de Simulação: %ld\n", impressao->gerenciador->tempo_simulacao_global);
     
     // Imprime estatísticas de cada processo
@@ -86,10 +88,13 @@ void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
         if (impressao->gerenciador->slot_tabela_ocupado[i]) {
             ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[i];
             printf("\nProcesso %d:\n", i);
-            printf("  Estado Final: %d\n", p->estado_atual);
+            printf("  Estado Final \t Tempo Total de CPU \t Tempo de Chegada \t Prioridade Final \n");
+            printf("  %d \t\t %ld \t\t\t %ld \t\t\t %d", p->estado_atual, p->tempo_total_cpu_usado, p->tempo_chegada_sistema, p->prioridade);
+
+            /*printf("  Estado Final: %d\n", p->estado_atual);
             printf("  Tempo Total de CPU: %ld\n", p->tempo_total_cpu_usado);
             printf("  Tempo de Chegada: %ld\n", p->tempo_chegada_sistema);
-            printf("  Prioridade Final: %d\n", p->prioridade);
+            printf("  Prioridade Final: %d\n", p->prioridade);*/
         }
     }
     printf("\n==============================\n");
