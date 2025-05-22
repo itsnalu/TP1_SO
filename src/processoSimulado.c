@@ -249,7 +249,7 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
             return;
             
         case 'F': // Cria um processo filho (fork)
-            {
+            /* {
                 ProcessoSimulado_t *filho = psCriarNovo(
                     -1, // PID será definido pelo Gerenciador
                     p->pid,
@@ -272,9 +272,29 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
                 pc_foi_alterado_por_salto = 1;    // PC do pai foi modificado diretamente
                 printf("[PID %d] Criado processo filho (PC pai=%d, PC filho=%d)\n", 
                        p->pid, p->pc, filho->pc);
+            } */
+           // FAVOR NAO MEXER NESTE FORK, A FUNÇÃO F PRECISA DE FORK.
+           // SE FOR MEXER, APENAS MODIFIQUE PARA FAZER FUNCIONAR, CASO NÃO FUNCIONE, PELO AMOR DE DEUS.
+            {
+                pid_t pid_filho = fork();
+                if (pid_filho == -1) {
+                    perror("Erro ao criar processo filho");
+                    p->estado_atual = EST_TERMINADO; // Falha na criação do processo
+                    return;
+                }
+                if (pid_filho == 0) { // Processo filho
+                    p->pid_pai = p->pid; // Define o PID do pai
+                    p->pid = -1; // Define o PID do filho (o gerenciador irá atribuir) // Não sei se isso ta definindo o PID do filho, ou do pai, mas usando fork isso pode estar dando paia. Bom verificar depois.
+                    p->pc++; // O filho começa na instrução seguinte a 'F'
+                    printf("[Filho] PID: %d, Pai: %d \n", p->pid, p->pid_pai);
+                } else { // Processo pai
+                    p->pc = (p->pc + 1) + instr.arg1; // O pai avança (PC_atual + 1) + n instruções
+                    printf("[Pai] PID: %d, criou filho PID: %d \n", p->pid, pid_filho);
+                    pc_foi_alterado_por_salto = 1; // PC do pai foi modificado diretamente
+                    return; // Pai retorna e segue execução
+                }
+                break;    
             }
-            break;
-            
         case 'R': // Substitui o programa do processo atual
             {
                 printf("[PID %d] Substituindo programa por %s\n", p->pid, instr.nome_arquivo_R);

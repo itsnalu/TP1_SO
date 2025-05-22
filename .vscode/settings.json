@@ -7,5 +7,6 @@
         "gerenciador.h": "c",
         "estados.h": "c",
         "fila.h": "c"
-    }
+    },
+    "makefile.configureOnOpen": false
 }
