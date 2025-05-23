@@ -2,7 +2,7 @@
 #include "../include/processos.h"
 
 
-void inicializarGerenciador(Processos *gerenciador) {
+void inicializarGerenciador(Processos *gerenciador, int a) {
     gerenciador->numProcessos = 0;
     gerenciador->capacidade = MAX_PROCESSOS;
     

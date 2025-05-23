@@ -79,7 +79,7 @@ void psLiberarMemoria(ProcessoSimulado_t *p);
 // Atualiza o estado do processo (p->estado_atual) e o PC conforme a instrução.
 // Se a instrução for 'F', aloca um novo processo filho e o retorna via 'novo_processo_filho_ptr'.
 // O chamador (Gerenciador) é responsável por gerenciar o 'novo_processo_filho_ptr'.
-void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr, GerenciadorDeProcessos_t *gerenciador);
+void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr);
 
 void psImprimirInstrucoes(const ProcessoSimulado_t *p); // Função para debug
 

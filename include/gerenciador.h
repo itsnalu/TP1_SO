@@ -6,6 +6,7 @@
 #include "cpu.h"              // Estrutura CPU_t
 #include "estados.h"          // Estruturas EstadoPronto_t, EstadoBloqueado_t
 #include "processoImpressao.h"
+#include "lista.h"
 
 // Estrutura que representa o gerenciador de processos
 struct GerenciadorDeProcessos_s {
@@ -18,6 +19,7 @@ struct GerenciadorDeProcessos_s {
     // Controle de quais slots da tabela_de_processos estão em uso.
     char slot_tabela_ocupado[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA];
     int proximo_pid_a_ser_alocado; // Contador para gerar PIDs únicos
+    Lista* tabela_processos;
 
     EstadoPronto_t processos_prontos;       // Estrutura para gerenciar processos prontos
     EstadoBloqueado_t processos_bloqueados; // Estrutura para gerenciar processos bloqueados

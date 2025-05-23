@@ -141,7 +141,7 @@ void psLiberarMemoria(ProcessoSimulado_t *p) {
     free(p);
 }
 
-void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr, GerenciadorDeProcessos_t *gerenciador) {
+void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr) {
     printf("[DEBUG] Iniciando execução de instrução para PID %d\n", p->pid);
     printf("[DEBUG] Estado atual: %d\n", p->estado_atual);
     printf("[DEBUG] PC atual: %d\n", p->pc);
@@ -248,54 +248,54 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
             printf("[PID %d] Processo terminado\n", p->pid);
             return;
             
+    
         case 'F': // Cria um processo filho (fork)
-            /* {
-                ProcessoSimulado_t *filho = psCriarNovo(
-                    -1, // PID será definido pelo Gerenciador
-                    p->pid,
-                    p->prioridade, // Filho herda prioridade
-                    tempo_global_simulador
-                );
-                
-                // Copia o programa e a memória do pai para o filho
-                psCopiarListaInstrucoes(&filho->listaInstrucoes, &p->listaInstrucoes);
-                memcpy(filho->memoria, p->memoria, sizeof(p->memoria));
-                filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
+{
+    // Cria uma estrutura temporária para passar informações do filho para o gerenciador
+    ProcessoSimulado_t *info_filho = psCriarNovo(-1, p->pid, p->prioridade, tempo_global_simulador);
+    
+    pid_t pid_filho = fork();
+    if (pid_filho == -1) {
+        perror("Erro ao criar processo filho");
+        p->estado_atual = EST_TERMINADO;
+        free(info_filho);
+        return;
+    }
 
-                // Define PCs conforme especificação
-                filho->pc = p->pc + 1;                  // Filho começa na instrução seguinte a 'F'
-                p->pc = (p->pc + 1) + instr.arg1;     // Pai avança (PC_atual + 1) + n instruções
-
-                filho->tempo_total_cpu_usado = 0; // Filho inicia com tempo de CPU zerado
-
-                *novo_processo_filho_ptr = filho; // Retorna o filho para o Gerenciador
-                pc_foi_alterado_por_salto = 1;    // PC do pai foi modificado diretamente
-                printf("[PID %d] Criado processo filho (PC pai=%d, PC filho=%d)\n", 
-                       p->pid, p->pc, filho->pc);
-            } */
-           // FAVOR NAO MEXER NESTE FORK, A FUNÇÃO F PRECISA DE FORK.
-           // SE FOR MEXER, APENAS MODIFIQUE PARA FAZER FUNCIONAR, CASO NÃO FUNCIONE, PELO AMOR DE DEUS.
-            {
-                pid_t pid_filho = fork();
-                if (pid_filho == -1) {
-                    perror("Erro ao criar processo filho");
-                    p->estado_atual = EST_TERMINADO; // Falha na criação do processo
-                    return;
-                }
-                if (pid_filho == 0) { // Processo filho
-                    p->pid_pai = p->pid; // Define o PID do pai
-                    p->pid = -1; // Define o PID do filho (o gerenciador irá atribuir) // Não sei se isso ta definindo o PID do filho, ou do pai, mas usando fork isso pode estar dando paia. Bom verificar depois.
-                    atribuirPidAoProcesso(gerenciador, pid_filho); // Atribui PID ao filho
-                    p->pc++; // O filho começa na instrução seguinte a 'F'
-                    printf("[Filho] PID: %d, Pai: %d \n", p->pid, p->pid_pai);
-                } else { // Processo pai
-                    p->pc = (p->pc + 1) + instr.arg1; // O pai avança (PC_atual + 1) + n instruções
-                    printf("[Pai] PID: %d, criou filho PID: %d \n", p->pid, pid_filho);
-                    pc_foi_alterado_por_salto = 1; // PC do pai foi modificado diretamente
-                    return; // Pai retorna e segue execução
-                }
-                break;    
-            }
+    if (pid_filho == 0) { 
+        // Processo filho
+        // O filho continua a execução normalmente
+        p->pid_pai = p->pid;
+        p->pc++; // O filho começa na instrução seguinte a 'F'
+        
+        printf("[Filho] PID real: %d, PID simulado: a ser atribuído, Pai: %d\n", 
+               getpid(), p->pid_pai);
+        
+        // Importante: o filho NÃO deve retornar o info_filho
+        free(info_filho);
+        return;
+    } else { 
+        // Processo pai
+        // Prepara as informações do filho para o gerenciador
+        info_filho->pc = p->pc + 1; // Filho começa na próxima instrução
+        
+        // Copia o programa e a memória do pai para as informações do filho
+        psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
+        memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
+        info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
+        
+        // Avança o PC do pai conforme o argumento da instrução F
+        p->pc = (p->pc + 1) + instr.arg1;
+        pc_foi_alterado_por_salto = 1;
+        
+        // Retorna as informações do filho para o gerenciador
+        *novo_processo_filho_ptr = info_filho;
+        
+        printf("[Pai] PID real: %d, PID simulado: %d, criou filho (PID real: %d)\n",
+               getpid(), p->pid, pid_filho);
+        return;
+    }
+}
         case 'R': // Substitui o programa do processo atual
             {
                 printf("[PID %d] Substituindo programa por %s\n", p->pid, instr.nome_arquivo_R);

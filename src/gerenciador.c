@@ -1,5 +1,4 @@
 #include "gerenciador.h"
-
 #include "processoSimulado.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +84,7 @@ void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArqu
     gerenciador->slot_tabela_ocupado[pid] = 1;
     printf("Processo criado com PID %d a partir do arquivo %s.\n", pid, nomeArquivo);
 }
-//função paa substituir a imagem atual de um processo para uma nova
+//função para substituir a imagem atual de um processo para uma nova
 void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, char *novaImagem){
     // Verifica se o PID é válido e se o processo existe
     if (pid < 0 || pid >= MAX_PROCESSOS_SIMULADOS_NO_SISTEMA || !gerenciador->slot_tabela_ocupado[pid]) {
@@ -155,11 +154,18 @@ void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
     }
     // Tenta obter o próximo processo da fila de prontos
     int proximo_pid = estadosRemoverPronto(&gerenciador->processos_prontos);
-    if (proximo_pid == -1) {
+/*     if (proximo_pid == -1) {
         // Não há processos prontos
         gerenciador->cpu_sistema.processo_atual = NULL;
         gerenciador->cpu_sistema.indice_processo_na_tabela = CPU_OCIOSA;
         printf("[Gerenciador] Nenhum processo pronto para execução\n");
+        return;
+    } */
+   if (proximo_pid < 0 || proximo_pid >= MAX_PROCESSOS_SIMULADOS_NO_SISTEMA || !gerenciador->slot_tabela_ocupado[proximo_pid]) {
+        // PID inválido ou slot não ocupado
+        gerenciador->cpu_sistema.processo_atual = NULL;
+        gerenciador->cpu_sistema.indice_processo_na_tabela = CPU_OCIOSA;
+        printf("[Gerenciador] Nenhum processo válido para execução (PID=%d)\n", proximo_pid);
         return;
     }
     // Encontra o processo na tabela de processos
@@ -249,48 +255,38 @@ static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
         
         psExecutarProximaInstrucao(processo_atual, 
                                 gerenciador->tempo_simulacao_global,
-                                &novo_filho,
-                                gerenciador);
-        
-        // Se um novo processo filho foi criado, adiciona-o ao gerenciador
-        if (novo_filho) {
-            // Encontra um slot livre na tabela de processos
-            int slot_livre = -1;
-            for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
-                if (!gerenciador->slot_tabela_ocupado[i]) {
-                    slot_livre = i;
-                    break;
-                }
+                                &novo_filho
+                                );
+                            
+       // Se um novo processo filho foi criado, adiciona-o ao gerenciador
+    if (novo_filho) {
+        // Encontra um slot livre na tabela de processos
+        int slot_livre = -1;
+        for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
+            if (!gerenciador->slot_tabela_ocupado[i]) {
+                slot_livre = i;
+                break;
             }
-            
-            if (slot_livre != -1) {
-                // Copia o processo filho para a tabela
-                gerenciador->tabela_de_processos[slot_livre] = *novo_filho;
-                gerenciador->slot_tabela_ocupado[slot_livre] = 1;
-                novo_filho->pid = slot_livre;
-                
-                // Adiciona à fila de prontos
-                estadosAdicionarPronto(&gerenciador->processos_prontos, 
-                                     novo_filho->pid, 
-                                     novo_filho->prioridade);
-                printf("[Gerenciador] Novo processo filho %d adicionado à fila de prontos\n", novo_filho->pid);
+        }
+        if (slot_livre != -1) {
+            // Copia o processo filho para a tabela
+            gerenciador->tabela_de_processos[slot_livre] = *novo_filho;
+            // Atribui o PID correto ao processo filho
+            gerenciador->tabela_de_processos[slot_livre].pid = slot_livre; gerenciador->slot_tabela_ocupado[slot_livre] = 1;
+            // Adiciona à fila de prontos
+            estadosAdicionarPronto(&gerenciador->processos_prontos,
+            slot_livre, // Usa o PID atribuído
+            novo_filho->prioridade);
+            printf("[Gerenciador] Novo processo filho %d adicionado à fila de prontos\n", slot_livre);
+            // Libera a memória do processo temporário
+            psLiberarMemoria(novo_filho);
             } else {
                 printf("[Gerenciador] Erro: Não há slots livres para o processo filho\n");
                 psLiberarMemoria(novo_filho);
             }
-        }
-        
-        // Incrementa o tempo de CPU usado pelo processo atual
-        processo_atual->tempo_total_cpu_usado++;
     }
-    
-    // Incrementa o tempo global
-    gerenciador->tempo_simulacao_global++;
-    
-    // Realiza o escalonamento
-    escalonarProcessos(gerenciador);
+    }
 }
-
 // Função auxiliar para imprimir estado atual
 static void imprimirEstadoAtual(GerenciadorDeProcessos_t *gerenciador) {
     printf("[Gerenciador] I → solicitada impressão do estado atual. Disparando processo impressão...\n");
