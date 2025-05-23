@@ -42,5 +42,7 @@ void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador);
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador);
 //função principal do gerenciador de processos simulados
 void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_inicial);
+// Atribui um PID a um processo simulado
+void atribuirPidAoProcesso(GerenciadorDeProcessos_t *gerenciador, ProcessoSimulado_t *processo);
 
 #endif // GERENCIADOR_H

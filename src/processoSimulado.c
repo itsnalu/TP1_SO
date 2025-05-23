@@ -141,7 +141,7 @@ void psLiberarMemoria(ProcessoSimulado_t *p) {
     free(p);
 }
 
-void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr) {
+void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr, GerenciadorDeProcessos_t *gerenciador) {
     printf("[DEBUG] Iniciando execução de instrução para PID %d\n", p->pid);
     printf("[DEBUG] Estado atual: %d\n", p->estado_atual);
     printf("[DEBUG] PC atual: %d\n", p->pc);
@@ -285,6 +285,7 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
                 if (pid_filho == 0) { // Processo filho
                     p->pid_pai = p->pid; // Define o PID do pai
                     p->pid = -1; // Define o PID do filho (o gerenciador irá atribuir) // Não sei se isso ta definindo o PID do filho, ou do pai, mas usando fork isso pode estar dando paia. Bom verificar depois.
+                    atribuirPidAoProcesso(gerenciador, pid_filho); // Atribui PID ao filho
                     p->pc++; // O filho começa na instrução seguinte a 'F'
                     printf("[Filho] PID: %d, Pai: %d \n", p->pid, p->pid_pai);
                 } else { // Processo pai

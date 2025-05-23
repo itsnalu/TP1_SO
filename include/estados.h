@@ -1,6 +1,5 @@
 #ifndef ESTADOS_H
 #define ESTADOS_H
-
 #include "fila.h"
 #include "config.h"
 
@@ -28,6 +27,7 @@ void estadosInicializarBloqueados(EstadoBloqueado_t *eb);
 void estadosLiberarProntos(EstadoPronto_t *ep);
 void estadosLiberarBloqueados(EstadoBloqueado_t *eb);
 //void estadosLiberarExecucao(EstadoExecucao_t *ee);
+
  // Funções para manipulação de procesos nos estados
 void estadosAdicionarPronto(EstadoPronto_t *ep, int pid, int prioridade);
 int estadosRemoverPronto(EstadoPronto_t *ep);
