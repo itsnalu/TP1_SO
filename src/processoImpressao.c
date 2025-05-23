@@ -1,7 +1,6 @@
 #include "../include/processoImpressao.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
     ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
@@ -10,7 +9,6 @@ void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_im
         exit(EXIT_FAILURE);
     }
 
-    impressao->pid = getpid();
     impressao->tipo_impressao = tipo_impressao;
     impressao->gerenciador = gerenciador;
 
@@ -27,22 +25,22 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
     printf("\n╔════════════════════════════════╗");
     printf("\n║   ESTADO ATUAL DO SISTEMA      ║");
     printf("\n╚════════════════════════════════╝\n");
-    //tempo global
+
     printf("\n┌────────────────────────────────┐");
-    printf("\n│ Tempo Global: %-15ld │", impressao->gerenciador->tempo_simulacao_global);
+    printf("\n│ Tempo Global: %-16ld │", impressao->gerenciador->tempo_simulacao_global);
     printf("\n└────────────────────────────────┘");
-    // Imprime estado da CPU
+
     printf("\n\n┌───── CPU ──────────────────────┐");
     if (impressao->gerenciador->cpu_sistema.processo_atual) {
-        printf("\n│ Processo Atual: PID %-10d │", impressao->gerenciador->cpu_sistema.processo_atual->pid);
-        printf("\n│ PC: %-26d │", impressao->gerenciador->cpu_sistema.pc_registrador_cpu);
-        printf("\n│ Quantum Total: %-17d │", impressao->gerenciador->cpu_sistema.quantum_total_alocado);
-        printf("\n│ Tempo Executado: %-14d │", impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
+        ProcessoSimulado_t *proc_atual = impressao->gerenciador->cpu_sistema.processo_atual;
+        printf("\n│ Processo Atual: PID %-10d │", proc_atual->pid);
+        printf("\n│ PC: %-26d │", proc_atual->pc);
+        printf("\n│ Quantum Total: %-15d │", impressao->gerenciador->cpu_sistema.quantum_total_alocado);
+        printf("\n│ Tempo Executado: %-13d │", impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
     } else {
-        printf("\n│          CPU OCIOSA           │");
+        printf("\n│          CPU OCIOSA            │");
     }
     printf("\n└────────────────────────────────┘");
-    
     
     // Imprime processos prontos
     printf("\nProcessos Prontos:\n");
@@ -55,7 +53,7 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
                 int pid = impressao->gerenciador->processos_prontos.filas_por_prioridade[i].elementos[idx];
                 ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
                 printf("    PID %d (PC: %d, Tempo CPU: %ld)\n", 
-                       pid, p->pc, p->tempo_total_cpu_usado);
+                       p->pid, p->pc, p->tempo_total_cpu_usado);
                 idx = (idx + 1) % impressao->gerenciador->processos_prontos.filas_por_prioridade[i].capacidade;
                 count++;
             }
@@ -73,7 +71,7 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
             int pid = impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados.elementos[idx];
             ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
             printf("  PID %d (Tempo Restante Bloqueio: %d)\n", 
-                   pid, p->tempo_restante_bloqueio);
+                   p->pid, p->tempo_restante_bloqueio);
             idx = (idx + 1) % impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados.capacidade;
             count++;
         }
@@ -83,20 +81,25 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
     printf("\n==============================\n");
 }
 
-
 void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
-    printf("\n=== Estatísticas Finais ===\n");
-    printf("Tempo Total de Simulação: %ld\n", impressao->gerenciador->tempo_simulacao_global);
+    printf("\n╔════════════════════════════════╗");
+    printf("\n║      ESTATÍSTICAS FINAIS       ║");
+    printf("\n╚════════════════════════════════╝\n");
+    
+    printf("\n┌────────────────────────────────┐");
+    printf("\n│ Tempo Total de Simulação: %-4ld │", impressao->gerenciador->tempo_simulacao_global);
+    printf("\n└────────────────────────────────┘\n");
     
     // Imprime estatísticas de cada processo
     for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
         if (impressao->gerenciador->slot_tabela_ocupado[i]) {
             ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[i];
-            printf("\nProcesso %d:\n", i);
-            printf("  Estado Final: %d\n", p->estado_atual);
-            printf("  Tempo Total de CPU: %ld\n", p->tempo_total_cpu_usado);
-            printf("  Tempo de Chegada: %ld\n", p->tempo_chegada_sistema);
-            printf("  Prioridade Final: %d\n", p->prioridade);
+            printf("\n┌───── Processo %d ───────────────┐\n", i);
+            printf("│ Estado Final: %-16d │\n", p->estado_atual);
+            printf("│ Tempo Total de CPU: %-10ld │\n", p->tempo_total_cpu_usado);
+            printf("│ Tempo de Chegada: %-12ld │\n", p->tempo_chegada_sistema);
+            printf("│ Prioridade Final: %-12d │\n", p->prioridade);
+            printf("└────────────────────────────────┘\n");
         }
     }
     printf("\n==============================\n");
@@ -104,6 +107,5 @@ void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
 
 void processoImpressaoFinalizar(ProcessoImpressao_t *impressao) {
     free(impressao);
-    exit(EXIT_SUCCESS);
 }
  

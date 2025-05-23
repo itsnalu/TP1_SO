@@ -34,33 +34,72 @@ void psCopiarListaInstrucoes(ListaInstrucoes_t *destino, const ListaInstrucoes_t
         return;
     }
     
-    printf("[DEBUG] Copiando lista de instruções (tamanho origem: %d)\n", origem->tamanho);
+    printf("[DEBUG] Iniciando cópia de lista de instruções (tamanho origem: %d)\n", origem->tamanho);
     
     // Limpa a lista de destino
     psLiberarListaInstrucoes(destino);
     psInicializarListaInstrucoes(destino);
     
+    // Verifica se a lista de origem está vazia
+    if (!origem->primeiro || !origem->primeiro->prox) {
+        printf("[DEBUG] Lista de origem vazia ou inválida\n");
+        return;
+    }
+    
     // Copia cada instrução
     ApontadorInstrucao_t atual_origem = origem->primeiro->prox; // Pula célula cabeça
+    int contador = 0;
+    
     while (atual_origem != NULL) {
         psInserirInstrucao(destino, atual_origem->instrucao);
-        printf("[DEBUG] Instrução copiada: %c %d %d\n", 
+        printf("[DEBUG] Instrução %d copiada: %c %d %d\n", 
+               contador,
                atual_origem->instrucao.tipoInstrucaoChar,
                atual_origem->instrucao.arg1,
                atual_origem->instrucao.arg2);
         atual_origem = atual_origem->prox;
+        contador++;
     }
     
-    printf("[DEBUG] Lista copiada com sucesso (tamanho destino: %d)\n", destino->tamanho);
+    printf("[DEBUG] Lista copiada com sucesso (tamanho destino: %d, instruções copiadas: %d)\n", 
+           destino->tamanho, contador);
 }
 // Função auxiliar interna para obter um ponteiro para a instrução no PC atual.
 static Instrucao_t* psObterInstrucaoNoPc(const ProcessoSimulado_t *p) {
-    if (!p || p->pc < 0 || p->pc >= p->listaInstrucoes.tamanho) return NULL;
+    if (!p) {
+        printf("[DEBUG] Erro: Processo nulo ao obter instrução no PC\n");
+        return NULL;
+    }
+    
+    if (p->pc < 0 || p->pc >= p->listaInstrucoes.tamanho) {
+        printf("[DEBUG] PC fora dos limites (PC: %d, Tamanho lista: %d)\n", 
+               p->pc, p->listaInstrucoes.tamanho);
+        return NULL;
+    }
+    
+    printf("[DEBUG] Tentando obter instrução no PC %d (tamanho lista: %d)\n", 
+           p->pc, p->listaInstrucoes.tamanho);
+    
     ApontadorInstrucao_t atual = p->listaInstrucoes.primeiro->prox;
+    if (!atual) {
+        printf("[DEBUG] Erro: Lista de instruções vazia\n");
+        return NULL;
+    }
+    
     for (int i = 0; i < p->pc && atual != NULL; ++i) {
         atual = atual->prox;
     }
-    return (atual ? &(atual->instrucao) : NULL);
+    
+    if (!atual) {
+        printf("[DEBUG] Erro: Não foi possível encontrar instrução no PC %d\n", p->pc);
+        return NULL;
+    }
+    
+    printf("[DEBUG] Instrução encontrada no PC %d: %c %d %d\n", 
+           p->pc, atual->instrucao.tipoInstrucaoChar, 
+           atual->instrucao.arg1, atual->instrucao.arg2);
+    
+    return &(atual->instrucao);
 }
 
 // --- Implementação Funções Principais do Processo Simulado ---
@@ -240,6 +279,14 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
         case 'B': // Bloqueia o processo
             p->estado_atual = EST_BLOQUEADO;
             p->tempo_restante_bloqueio = (instr.arg1 > 0) ? instr.arg1 : 1;
+            // Aumenta a prioridade se o processo foi bloqueado antes de consumir seu quantum
+            if (p->tempo_usado_no_quantum_atual < instr.arg1) {
+                if (p->prioridade > 0) {
+                    p->prioridade--;
+                    printf("[PID %d] Prioridade aumentada para %d por bloqueio antecipado\n", 
+                           p->pid, p->prioridade);
+                }
+            }
             printf("[PID %d] Processo bloqueado por %d unidades de tempo\n", p->pid, p->tempo_restante_bloqueio);
             return;
             
@@ -248,53 +295,29 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
             printf("[PID %d] Processo terminado\n", p->pid);
             return;
             
-    
         case 'F': // Cria um processo filho (fork)
 {
     // Cria uma estrutura temporária para passar informações do filho para o gerenciador
     ProcessoSimulado_t *info_filho = psCriarNovo(-1, p->pid, p->prioridade, tempo_global_simulador);
     
-    pid_t pid_filho = fork();
-    if (pid_filho == -1) {
-        perror("Erro ao criar processo filho");
-        p->estado_atual = EST_TERMINADO;
-        free(info_filho);
-        return;
-    }
-
-    if (pid_filho == 0) { 
-        // Processo filho
-        // O filho continua a execução normalmente
-        p->pid_pai = p->pid;
-        p->pc++; // O filho começa na instrução seguinte a 'F'
-        
-        printf("[Filho] PID real: %d, PID simulado: a ser atribuído, Pai: %d\n", 
-               getpid(), p->pid_pai);
-        
-        // Importante: o filho NÃO deve retornar o info_filho
-        free(info_filho);
-        return;
-    } else { 
-        // Processo pai
-        // Prepara as informações do filho para o gerenciador
-        info_filho->pc = p->pc + 1; // Filho começa na próxima instrução
-        
-        // Copia o programa e a memória do pai para as informações do filho
-        psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
-        memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
-        info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
-        
-        // Avança o PC do pai conforme o argumento da instrução F
-        p->pc = (p->pc + 1) + instr.arg1;
-        pc_foi_alterado_por_salto = 1;
-        
-        // Retorna as informações do filho para o gerenciador
-        *novo_processo_filho_ptr = info_filho;
-        
-        printf("[Pai] PID real: %d, PID simulado: %d, criou filho (PID real: %d)\n",
-               getpid(), p->pid, pid_filho);
-        return;
-    }
+    // Simula a criação do filho
+    info_filho->pc = p->pc + 1; // Filho começa na próxima instrução
+    
+    // Copia o programa e a memória do pai para as informações do filho
+    psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
+    memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
+    info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
+    
+    // Avança o PC do pai conforme o argumento da instrução F
+    p->pc = (p->pc + 1) + instr.arg1;
+    pc_foi_alterado_por_salto = 1;
+    
+    // Retorna as informações do filho para o gerenciador
+    *novo_processo_filho_ptr = info_filho;
+    
+    printf("[Pai] PID simulado: %d, criou filho simulado (PC inicial: %d)\n", 
+           p->pid, info_filho->pc);
+    return;
 }
         case 'R': // Substitui o programa do processo atual
             {
@@ -313,7 +336,8 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
     // Avança o PC se não foi uma instrução de salto e o processo continua em execução
     if (!pc_foi_alterado_por_salto && p->estado_atual == EST_EXECUCAO) {
         p->pc++;
-        printf("[DEBUG] PC incrementado para %d\n", p->pc);
+        printf("[DEBUG] PC incrementado para %d (tamanho lista: %d)\n", 
+               p->pc, p->listaInstrucoes.tamanho);
     }
 }
 

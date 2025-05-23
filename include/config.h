@@ -19,9 +19,9 @@
 #define ARQUIVO_INIT_PROGRAMA "init.txt" // Arquivo do primeiro processo
 
 // Quantum por nível de prioridade (usado pelo Gerenciador)
-#define QUANTUM_PRIORIDADE_0 0
-#define QUANTUM_PRIORIDADE_1 1
-#define QUANTUM_PRIORIDADE_2 2
-#define QUANTUM_PRIORIDADE_3 3
+#define QUANTUM_PRIORIDADE_0 1  // Prioridade mais alta
+#define QUANTUM_PRIORIDADE_1 2
+#define QUANTUM_PRIORIDADE_2 4
+#define QUANTUM_PRIORIDADE_3 8  // Prioridade mais baixa
 
 #endif // CONFIG_H

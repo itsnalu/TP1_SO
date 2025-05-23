@@ -26,7 +26,7 @@ void processo_controle(int fd_read, ProcessoSimulado_t *processo) {
         switch (comando[0]) {
             case 'U':
                 printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");
-            //executarInstrucao(processo);
+
                 break;
             case 'I':
                 printf("[Gerenciador] I → solicitada impressão do estado atual. Disparando processo impressão...\n");
@@ -39,9 +39,6 @@ void processo_controle(int fd_read, ProcessoSimulado_t *processo) {
             default:
                 printf("[Gerenciador] Comando inválido: '%s'\n", comando);
                 break;
-        }
-        if (comando[0] == 'M'){
-            break;
         }
     }
     fclose(pipe_in);
