@@ -204,7 +204,6 @@ void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
            gerenciador->cpu_sistema.quantum_total_alocado);
 }
 // Funcao de escalonamento de processos usando FIFO
-
 void escalonarProcessosFIFO(GerenciadorDeProcessos_t *gerenciador){
     // Se há um processo em execução, verifica se ele deve ser reinserido na fila
     if(gerenciador->cpu_sistema.processo_atual){
@@ -239,6 +238,91 @@ void escalonarProcessosFIFO(GerenciadorDeProcessos_t *gerenciador){
            proximo_processo->pid,
            proximo_processo->pc,
            gerenciador->cpu_sistema.quantum_total_alocado);
+}
+//Função de escalonamento de processos com THREADS
+void escalonarProcessosThreads(GerenciadorDeProcessos_t *gerenciador){
+    // Se há um processo em execução, verifica se precisa ser reinserido na fila de prontos
+    if (gerenciador->cpu_sistema.processo_atual) {
+        ProcessoSimulado_t *processo_atual = gerenciador->cpu_sistema.processo_atual;
+        
+        // Se o processo não está bloqueado ou terminado, reinsere na fila de prontos
+        if (processo_atual->estado_atual != EST_BLOQUEADO && 
+            processo_atual->estado_atual != EST_TERMINADO) {
+            
+            // Verifica se o quantum foi consumido
+            if (gerenciador->cpu_sistema.tempo_executado_neste_quantum >= gerenciador->cpu_sistema.quantum_total_alocado) {
+                // Diminui a prioridade se o quantum foi consumido
+                if (processo_atual->prioridade < NUM_NIVEIS_PRIORIDADE - 1) {
+                    processo_atual->prioridade++;
+                    printf("[Gerenciador] Processo %d teve prioridade aumentada para %d\n",
+                           processo_atual->pid, processo_atual->prioridade);
+                }
+            }
+            
+            processo_atual->estado_atual = EST_PRONTO;
+            estadosAdicionarPronto(&gerenciador->processos_prontos, 
+                                   processo_atual->pid, 
+                                   processo_atual->prioridade);
+            
+            printf("[Gerenciador] Processo %d reinserido na fila de prontos (Prioridade: %d)\n",
+                   processo_atual->pid, processo_atual->prioridade);
+        }
+    }
+
+    // Tenta obter o próximo processo da fila de prontos
+    int proximo_pid = estadosRemoverPronto(&gerenciador->processos_prontos);
+    if (proximo_pid < 0 || proximo_pid >= MAX_PROCESSOS_SIMULADOS_NO_SISTEMA || 
+        !gerenciador->slot_tabela_ocupado[proximo_pid]) {
+        // PID inválido ou slot não ocupado
+        gerenciador->cpu_sistema.processo_atual = NULL;
+        gerenciador->cpu_sistema.indice_processo_na_tabela = CPU_OCIOSA;
+        printf("[Gerenciador] Nenhum processo válido para execução (PID=%d)\n", proximo_pid);
+        return;
+    }
+
+    // Encontra o processo na tabela de processos
+    ProcessoSimulado_t *proximo_processo = &gerenciador->tabela_de_processos[proximo_pid];
+    
+    // Atualiza o estado do processo para execução
+    proximo_processo->estado_atual = EST_EXECUCAO;
+    
+    // Atualiza a CPU com o novo processo
+    gerenciador->cpu_sistema.processo_atual = proximo_processo;
+    gerenciador->cpu_sistema.indice_processo_na_tabela = proximo_pid;
+    gerenciador->cpu_sistema.pc_registrador_cpu = proximo_processo->pc;
+    
+    // Define o quantum baseado na prioridade
+    switch (proximo_processo->prioridade) {
+        case 0:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_0;
+            break;
+        case 1:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_1;
+            break;
+        case 2:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_2;
+            break;
+        case 3:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_3;
+            break;
+        default:
+            gerenciador->cpu_sistema.quantum_total_alocado = QUANTUM_PRIORIDADE_0;
+    }
+    
+    gerenciador->cpu_sistema.tempo_executado_neste_quantum = 0;
+    
+    printf("[Gerenciador] Processo %d escalonado para execução (PC=%d, Prioridade=%d, Quantum=%d)\n",
+           proximo_processo->pid, proximo_processo->pc, proximo_processo->prioridade,
+           gerenciador->cpu_sistema.quantum_total_alocado);
+
+    // Cria a thread para executar o processo simulado
+    int resultado_thread = pthread_create(&proximo_processo->thread, NULL, psExecutarProcesso, (void*)proximo_processo);
+    if (resultado_thread != 0) {
+        fprintf(stderr, "[Erro] Falha ao criar thread para o processo %d\n", proximo_processo->pid);
+        proximo_processo->estado_atual = EST_TERMINADO;
+        gerenciador->cpu_sistema.processo_atual = NULL;
+        return;
+    }
 }
 // Função para realizar a troca de contexto entre processos
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador){

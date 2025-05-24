@@ -359,3 +359,80 @@ void psImprimirInstrucoes(const ProcessoSimulado_t *p) { // Para debug
     }
     printf("---------------------------------------------------------------\n");
 }
+
+// Essa função simula um interpretador de instruções.
+void* executar_processo(void* arg){
+    ProcessoSimulado_t* processo = (ProcessoSimulado_t*) arg;
+    
+    printf("[PID %d] Iniciando execução do processo.\n", processo->pid);
+    
+    processo->estado_atual = EST_EXECUCAO;
+
+    ApontadorInstrucao_t atual = processo->listaInstrucoes.primeiro;
+    int pc = 0;
+
+    while(atual != NULL){
+        Instrucao_t instrucao = atual->instrucao;
+
+        printf("[PID %d] Executando instrução %c (arg1: %d, arg2: %d)\n",
+               processo->pid,
+               instrucao.tipoInstrucaoChar,
+               instrucao.arg1,
+               instrucao.arg2);
+
+        switch(instrucao.tipoInstrucaoChar){
+            case 'N':
+                // Declarar variável (reserva espaço na memória)
+                if(processo->num_variaveis_declaradas < MAX_MEMORIA_PROCESSO_SIMULADO){
+                    processo->memoria[processo->num_variaveis_declaradas++] = 0;
+                }
+                break;
+
+            case 'D':
+                // Atribuir valor direto
+                if(instrucao.arg1 < processo->num_variaveis_declaradas){
+                    processo->memoria[instrucao.arg1] = instrucao.arg2;
+                }
+                break;
+
+            case 'V':
+                // Visualiza valor (debug)
+                if(instrucao.arg1 < processo->num_variaveis_declaradas){
+                    printf("[PID %d] VAR[%d] = %d\n", processo->pid, instrucao.arg1, processo->memoria[instrucao.arg1]);
+                }
+                break;
+
+            case 'B':
+                // Bloqueia o processo
+                processo->estado_atual = EST_BLOQUEADO;
+                processo->tempo_restante_bloqueio = instrucao.arg1;
+                printf("[PID %d] Processo bloqueado por %d unidades de tempo.\n",
+                       processo->pid, instrucao.arg1);
+                pthread_exit(NULL); // Finaliza execução por enquanto
+                break;
+
+            case 'T':
+                // Termina o processo
+                processo->estado_atual = EST_TERMINADO;
+                printf("[PID %d] Processo terminou.\n", processo->pid);
+                pthread_exit(NULL);
+                break;
+
+            default:
+                printf("[PID %d] Instrução desconhecida: %c\n", processo->pid, instrucao.tipoInstrucaoChar);
+        }
+
+        atual = atual->prox;
+        pc++;
+        processo->pc = pc;
+
+        // Simula tempo de CPU gasto por instrução
+        sleep(1);
+        processo->tempo_total_cpu_usado += 1;
+    }
+
+    processo->estado_atual = EST_TERMINADO;
+    printf("[PID %d] Fim da execução do processo.\n", processo->pid);
+
+    pthread_exit(NULL);
+}

@@ -55,6 +55,8 @@ typedef struct ProcessoSimulado_s {
 
     int numProcessos; // Número de processos filhos criados por este processo
 
+    pthread_t thread;
+
 } ProcessoSimulado_t;
 
 // --- Funções de Lista de Instruções (uso interno e para 'F') ---
@@ -82,6 +84,9 @@ void psLiberarMemoria(ProcessoSimulado_t *p);
 void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr);
 
 void psImprimirInstrucoes(const ProcessoSimulado_t *p); // Função para debug
+
+void* psExecutarProcesso(void* arg);
+
 
 
 #endif // PROCESSO_SIMULADO_H
