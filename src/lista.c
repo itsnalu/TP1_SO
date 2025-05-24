@@ -76,7 +76,7 @@ void imprimeTabela(Lista* lista){
     aux = lista->inicio->proximo;
     while (aux != NULL)
     {
-        imprimeProcesso(*(aux->processo), 1);
+    // imprimeProcesso(*(aux->processo), 1); // Comentado: Função não definida
         aux = aux->proximo;
     }
 }

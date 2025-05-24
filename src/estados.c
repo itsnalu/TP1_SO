@@ -9,6 +9,9 @@ void estadosInicializarProntos(EstadoPronto_t *ep){
     for(int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++){
         filaInicializar(&ep->filas_por_prioridade[i]);
     }
+    // Inicializa também a fila específica para FIFO
+    filaInicializar(&ep->fila_fifo);
+    printf("[DEBUG] Fila FIFO inicializada.\n"); // DEBUG
 }
 //inicializar as filas de processos bloqueados
 void estadosInicializarBloqueados(EstadoBloqueado_t *eb){
@@ -58,8 +61,31 @@ int estadosRemoverPronto(EstadoPronto_t *ep) {
     }
     return -1; // Nenhum processo pronto disponível
 }
+// Função para adicionar processo à fila FIFO
+void estadosAdicionarProntoFIFO(EstadoPronto_t *ep, int pid){
+    FilaProcessos_t *fila = &ep->fila_fifo;
+// Verifica se o processo já está na fila FIFO
+    int idx = fila->inicio_fila;
+    int i;
+    for(i = 0; i < fila->tamanho; i++){
+        if(fila->elementos[idx] == pid){
+            printf("[DEBUG] Processo %d já está na fila FIFO\n", pid);
+            return;
+        }
+        idx = (idx + 1) % fila->capacidade;
+    }
+    // Adiciona processo na fila FIFO
+    filaEnfileirar(fila, pid);
+    printf("[DEBUG] Processo %d adicionado à fila FIFO\n", pid);
+}
+// Remove o próximo processo da fila FIFO
+int estadosRemoverProntoFIFO(EstadoPronto_t *ep) {
+    if (filaEstaVazia(&ep->fila_fifo)) {
+        return -1; // Fila vazia
+    }
+    return filaDesenfileirar(&ep->fila_fifo);
+}
 //Adicionar um processo a fila de bloqueados
-
 void estadosAdicionarBloqueado(EstadoBloqueado_t *eb, int pid){
     // Adiciona o processo à fila de bloqueados
     filaEnfileirar(&eb->fila_geral_bloqueados, pid);

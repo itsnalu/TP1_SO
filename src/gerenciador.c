@@ -90,10 +90,8 @@ void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, ch
         printf("Processo não encontrado.\n");
         return;
     }
-
     // Substitui o programa do processo pelo novo programa
     ProcessoSimulado_t *processo = &gerenciador->tabela_de_processos[pid];
-
     // Libera a lista de instruções antiga
     CelulaInstrucao_t *atual = processo->listaInstrucoes.primeiro;
     while(atual != NULL){
@@ -101,19 +99,16 @@ void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, ch
         atual = atual->prox;
         free(temp);
     }
-
     // Zera os dados da lista
     processo->listaInstrucoes.primeiro = NULL;
     processo->listaInstrucoes.ultimo = NULL;
     processo->listaInstrucoes.tamanho = 0;
-
     // Reinicia os valores de execução
     processo->pc = 0;
     processo->tempo_total_cpu_usado = 0;
     processo->tempo_restante_bloqueio = 0;
     processo->tempo_usado_no_quantum_atual = 0;
     processo->estado_atual = EST_PRONTO;
-
     // Carrega a nova imagem do processo
     psCarregarProgramaDeArquivo(processo, novaImagem);
     printf("Imagem do processo %d substituída com sucesso.\n", pid);
@@ -208,7 +203,43 @@ void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
            proximo_processo->pid, proximo_processo->pc, proximo_processo->prioridade,
            gerenciador->cpu_sistema.quantum_total_alocado);
 }
+// Funcao de escalonamento de processos usando FIFO
 
+void escalonarProcessosFIFO(GerenciadorDeProcessos_t *gerenciador){
+    // Se há um processo em execução, verifica se ele deve ser reinserido na fila
+    if(gerenciador->cpu_sistema.processo_atual){
+        ProcessoSimulado_t *processo_atual = gerenciador->cpu_sistema.processo_atual;
+        if(processo_atual->estado_atual != EST_BLOQUEADO && 
+            processo_atual->estado_atual != EST_TERMINADO){
+            processo_atual->estado_atual = EST_PRONTO;
+            estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, processo_atual->pid);
+            printf("[FIFO] Processo %d reinserido na fila FIFO\n", processo_atual->pid);
+        }
+    }
+    // Obtem o próximo processo da fila FIFO
+    int proximo_pid = estadosRemoverProntoFIFO(&gerenciador->processos_prontos);
+    if(proximo_pid == -1){
+        // Nenhum processo pronto
+        gerenciador->cpu_sistema.processo_atual = NULL;
+        gerenciador->cpu_sistema.indice_processo_na_tabela = CPU_OCIOSA;
+        printf("[FIFO] Nenhum processo pronto para execução\n");
+        return;
+    }
+    // Aponta para o processo selecionado
+    ProcessoSimulado_t *proximo_processo = &gerenciador->tabela_de_processos[proximo_pid];
+    proximo_processo->estado_atual = EST_EXECUCAO;
+    gerenciador->cpu_sistema.processo_atual = proximo_processo;
+    gerenciador->cpu_sistema.indice_processo_na_tabela = proximo_pid;
+    gerenciador->cpu_sistema.pc_registrador_cpu = proximo_processo->pc;
+    // FIFO nao usa quantum, entao zera os campos relacionados a quantum
+    gerenciador->cpu_sistema.quantum_total_alocado = 0; 
+    // quantum total alocado é 0 para FIFO
+    gerenciador->cpu_sistema.tempo_executado_neste_quantum = 0;
+    printf("[FIFO] Processo %d escalonado (PC=%d, Quantum=%d)\n",
+           proximo_processo->pid,
+           proximo_processo->pc,
+           gerenciador->cpu_sistema.quantum_total_alocado);
+}
 // Função para realizar a troca de contexto entre processos
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
     CPU_t *cpu = &gerenciador->cpu_sistema;
@@ -251,13 +282,16 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
         novo_processo->tempo_chegada_sistema = gerenciador->tempo_simulacao_global;
     }
 }
-
 // Função auxiliar para executar uma unidade de tempo
 static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
     printf("[Gerenciador] U → fim de unidade de tempo. Executando próxima instrução, incrementando contador e escalonando.\n");
 
     // Primeiro, escalona um processo para a CPU
+#ifdef USE_FIFO
+    escalonarProcessosFIFO(gerenciador);
+#else
     escalonarProcessos(gerenciador);
+#endif
 
     // Executa próxima instrução do processo atual
     if (gerenciador->cpu_sistema.processo_atual) {
@@ -291,11 +325,15 @@ static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
             psCopiarListaInstrucoes(&processo_tabela->listaInstrucoes, &novo_filho->listaInstrucoes);
             
             // Adiciona à fila de prontos
+#ifdef USE_FIFO
+            estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, novo_filho->pid);
+            printf("[Gerenciador FIFO] Novo processo filho %d adicionado à fila FIFO\n", novo_filho->pid);
+#else
             estadosAdicionarPronto(&gerenciador->processos_prontos,
                 novo_filho->pid,
                 novo_filho->prioridade);
-                
             printf("[Gerenciador] Novo processo filho %d adicionado à fila de prontos\n", novo_filho->pid);
+#endif
             
             // Libera a memória do processo temporário
             psLiberarMemoria(novo_filho);
@@ -357,7 +395,13 @@ void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_ini
     gerenciador.slot_tabela_ocupado[0] = 1;
     
     // Adiciona o processo inicial à fila de prontos
+#ifdef USE_FIFO
+    estadosAdicionarProntoFIFO(&gerenciador.processos_prontos, processo_inicial->pid);
+    printf("[DEBUG FIFO] Processo inicial %d adicionado à fila FIFO\n", processo_inicial->pid);
+#else
     estadosAdicionarPronto(&gerenciador.processos_prontos, processo_inicial->pid, processo_inicial->prioridade);
+    // Removido o printf duplicado que estava aqui, pois ele já existe na função estadosAdicionarPronto
+#endif
     
     printf("=== Gerenciador de Processos Iniciado ===\n");
     printf("Aguardando comandos (U, I, M) do processo controle...\n\n");
@@ -408,12 +452,10 @@ void atribuirPidAoProcesso(GerenciadorDeProcessos_t *gerenciador, ProcessoSimula
             break;
         }
     }
-    
     if (pid == MAX_PROCESSOS_SIMULADOS_NO_SISTEMA) {
         printf("Limite de processos atingido.\n");
         return;
     }
-    
     // Atribui o PID ao processo
     processo->pid = pid;
     // Marca o slot como ocupado
