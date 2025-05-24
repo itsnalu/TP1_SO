@@ -14,6 +14,9 @@
 #include <sys/wait.h>
 
 int main(int argc, char *argv[]) {
+    // Inicializa o semáforo com valor 1 
+    sem_init(&sem_impressao, 0, 1);
+
     // Apresentação inicial
     printf("\n===== Simulador de Gerenciamento de Processos =====\n\n");
 
@@ -193,5 +196,6 @@ int main(int argc, char *argv[]) {
         printf("\n===== Simulação Concluída. Processo Controle Encerrado. =====\n");
     }
 
+    sem_destroy(&sem_impressao);
     return 0;
 }

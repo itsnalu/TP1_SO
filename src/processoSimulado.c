@@ -396,7 +396,7 @@ void* psExecutarProcesso(void* arg){
                 break;
 
             case 'V':
-                // Visualiza valor (debug)
+                // Visualiza valor 
                 if(instrucao.arg1 < processo->num_variaveis_declaradas){
                     printf("[PID %d] VAR[%d] = %d\n", processo->pid, instrucao.arg1, processo->memoria[instrucao.arg1]);
                 }

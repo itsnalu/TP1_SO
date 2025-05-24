@@ -2,24 +2,64 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Definição do semáforo
+sem_t sem_impressao;
+
 void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
-    ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
-    if (!impressao) {
-        perror("Erro ao alocar memória para processo de impressão");
-        exit(EXIT_FAILURE);
+    pid_t pid = fork();
+    
+    if (pid < 0) {
+        perror("Erro ao criar processo de impressão");
+        return;
     }
+    
+    if (pid == 0) { // Processo filho
+        // Tenta adquirir o semáforo
+        if (sem_wait(&sem_impressao) == 0) {
+            ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
+            if (!impressao) {
+                sem_post(&sem_impressao);
+                exit(EXIT_FAILURE);
+            }
 
-    impressao->tipo_impressao = tipo_impressao;
-    impressao->gerenciador = gerenciador;
+            impressao->tipo_impressao = tipo_impressao;
+            impressao->gerenciador = gerenciador;
 
-    if (tipo_impressao == 0) {
-        processoImpressaoImprimirEstado(impressao);
-    } else {
-        processoImpressaoImprimirEstatisticas(impressao);
+            if (tipo_impressao == 0) {
+                processoImpressaoImprimirEstado(impressao);
+            } else {
+                processoImpressaoImprimirEstatisticas(impressao);
+            }
+
+            processoImpressaoFinalizar(impressao);
+            sem_post(&sem_impressao);
+        }
+        exit(0);
+    } else { // Processo pai
+        if (tipo_impressao == 1) { // Se for comando M, espera o processo de impressão terminar
+            waitpid(pid, NULL, 0);
+        }
     }
-
-    processoImpressaoFinalizar(impressao);
 }
+
+// void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
+//     ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
+//     if (!impressao) {
+//         perror("Erro ao alocar memória para processo de impressão");
+//         exit(EXIT_FAILURE);
+//     }
+
+//     impressao->tipo_impressao = tipo_impressao;
+//     impressao->gerenciador = gerenciador;
+
+//     if (tipo_impressao == 0) {
+//         processoImpressaoImprimirEstado(impressao);
+//     } else {
+//         processoImpressaoImprimirEstatisticas(impressao);
+//     }
+
+//     processoImpressaoFinalizar(impressao);
+// }
 
 void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
     printf("\n╔════════════════════════════════╗");
