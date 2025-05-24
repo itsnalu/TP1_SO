@@ -361,7 +361,7 @@ void psImprimirInstrucoes(const ProcessoSimulado_t *p) { // Para debug
 }
 
 // Essa função simula um interpretador de instruções.
-void* executar_processo(void* arg){
+void* psExecutarProcesso(void* arg){
     ProcessoSimulado_t* processo = (ProcessoSimulado_t*) arg;
     
     printf("[PID %d] Iniciando execução do processo.\n", processo->pid);

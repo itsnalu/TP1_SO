@@ -1,0 +1,6 @@
+N 0
+F 1
+R fileP1.txt
+F 1
+R fileP2.txt
+T

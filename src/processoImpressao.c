@@ -41,38 +41,73 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
         printf("\n│          CPU OCIOSA            │");
     }
     printf("\n└────────────────────────────────┘");
-    
-    // Imprime processos prontos
+
+#ifdef USE_FIFO
+    printf("\nProcessos Prontos (Fila FIFO):\n");
+    FilaProcessos_t *fila_fifo = &impressao->gerenciador->processos_prontos.fila_fifo;
+    if (!filaEstaVazia(fila_fifo)) {
+        int idx = fila_fifo->inicio_fila;
+        int count = 0;
+        while (count < fila_fifo->tamanho) {
+            int pid = fila_fifo->elementos[idx];
+            if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
+                ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
+                if (p->estado_atual == EST_PRONTO) { // Verifica se realmente está PRONTO
+                    printf("    PID %d (PC: %d, Tempo CPU: %ld)\n",
+                           p->pid, p->pc, p->tempo_total_cpu_usado);
+                }
+            }
+            idx = (idx + 1) % fila_fifo->capacidade;
+            count++;
+        }
+    } else {
+        printf("    Nenhum processo na fila FIFO\n");
+    }
+#else
     printf("\nProcessos Prontos:\n");
     for (int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++) {
         printf("  Prioridade %d:\n", i);
-        if (!filaEstaVazia(&impressao->gerenciador->processos_prontos.filas_por_prioridade[i])) {
-            int idx = impressao->gerenciador->processos_prontos.filas_por_prioridade[i].inicio_fila;
+        FilaProcessos_t *fila_prioridade = &impressao->gerenciador->processos_prontos.filas_por_prioridade[i];
+        if (!filaEstaVazia(fila_prioridade)) {
+            int idx = fila_prioridade->inicio_fila;
             int count = 0;
-            while (count < impressao->gerenciador->processos_prontos.filas_por_prioridade[i].tamanho) {
-                int pid = impressao->gerenciador->processos_prontos.filas_por_prioridade[i].elementos[idx];
-                ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
-                printf("    PID %d (PC: %d, Tempo CPU: %ld)\n", 
-                       p->pid, p->pc, p->tempo_total_cpu_usado);
-                idx = (idx + 1) % impressao->gerenciador->processos_prontos.filas_por_prioridade[i].capacidade;
+            while (count < fila_prioridade->tamanho) {
+                int pid = fila_prioridade->elementos[idx];
+                if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
+                    ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
+                     if (p->estado_atual == EST_PRONTO) { // Verifica se realmente está PRONTO
+                        printf("    PID %d (PC: %d, Prioridade: %d, Tempo CPU: %ld)\n",
+                               p->pid, p->pc, p->prioridade, p->tempo_total_cpu_usado);
+                    }
+                }
+                idx = (idx + 1) % fila_prioridade->capacidade;
                 count++;
             }
         } else {
             printf("    Nenhum processo\n");
         }
     }
-    
-    // Imprime processos bloqueados
+#endif
+
     printf("\nProcessos Bloqueados:\n");
-    if (!filaEstaVazia(&impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados)) {
-        int idx = impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados.inicio_fila;
+    FilaProcessos_t *fila_bloqueados = &impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados;
+    if (!filaEstaVazia(fila_bloqueados)) {
+        int idx = fila_bloqueados->inicio_fila;
         int count = 0;
-        while (count < impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados.tamanho) {
-            int pid = impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados.elementos[idx];
-            ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
-            printf("  PID %d (Tempo Restante Bloqueio: %d)\n", 
-                   p->pid, p->tempo_restante_bloqueio);
-            idx = (idx + 1) % impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados.capacidade;
+        // Itera sobre uma cópia dos PIDs ou de forma cuidadosa se a fila puder ser modificada por outro thread
+        // Para a impressão, a iteração simples deve ser segura, pois a fila não é modificada *durante* esta função de impressão.
+        while (count < fila_bloqueados->tamanho) {
+            int pid = fila_bloqueados->elementos[idx];
+            if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
+                ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
+                // Ele poderia ter sido despertado e movido para pronto entre a última ação e a impressão,
+                // embora com 'U' sendo a unidade de tempo, isso é menos provável de ser um problema de corrida aqui.
+                if (p->estado_atual == EST_BLOQUEADO) {
+                     printf("  PID %d (Tempo Restante Bloqueio: %d, Prioridade: %d)\n",
+                           p->pid, p->tempo_restante_bloqueio, p->prioridade);
+                }
+            }
+            idx = (idx + 1) % fila_bloqueados->capacidade;
             count++;
         }
     } else {
