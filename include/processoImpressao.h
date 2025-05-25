@@ -1,32 +1,29 @@
 #ifndef PROCESSO_IMPRESSAO_H
 #define PROCESSO_IMPRESSAO_H
 
-#include "gerenciador.h"
+#include "config.h" // Para declaração extern de impressao_mutex 
+#include <pthread.h> // Para pthread_t
+
 
 struct GerenciadorDeProcessos_s;
-typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
 
-//  Este semáforo garante que apenas um processo de impressão
-// execute por vez, evitando condições de corrida na saída
-// do sistema.
-extern sem_t sem_impressao;
-
+// Estrutura para passar argumentos para a thread de impressão.
+// Substitui a antiga ProcessoImpressao_t para este propósito.
 typedef struct {
-    int pid;                    // Identificador do processo de impressão
-    GerenciadorDeProcessos_t *gerenciador; // Ponteiro para o gerenciador
-    int tipo_impressao; // 0 = normal, 1 = final
-} ProcessoImpressao_t;
+    struct GerenciadorDeProcessos_s *gerenciador; // Ponteiro para a estrutura principal do gerenciador
+    int tipo_impressao;                           // 0 para impressão de estado atual, 1 para estatísticas finais
+} ImpressaoArgs_t;
 
-// Inicia o processo de impressão
-void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao);
+// Inicia o processo de impressão.
+// Esta função agora criará uma thread destacada que executará a lógica de impressão.
+void processoImpressaoIniciar(struct GerenciadorDeProcessos_s *gerenciador, int tipo_impressao);
 
-// Imprime o estado atual do sistema
-void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao);
+// Imprime o estado atual do sistema.
+// Chamada pela thread de impressão. Recebe o ponteiro para o gerenciador.
+void processoImpressaoImprimirEstado(struct GerenciadorDeProcessos_s *gerenciador_ptr);
 
-// Imprime as estatísticas do sistema
-void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao);
+// Imprime as estatísticas finais do sistema.
+// Chamada pela thread de impressão. Recebe o ponteiro para o gerenciador.
+void processoImpressaoImprimirEstatisticas(struct GerenciadorDeProcessos_s *gerenciador_ptr);
 
-// Finaliza o processo de impressão
-void processoImpressaoFinalizar(ProcessoImpressao_t *impressao);
-
-#endif // PROCESSO_IMPRESSAO_H 
+#endif // PROCESSO_IMPRESSAO_H

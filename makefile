@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Iinclude
-LDFLAGS = -lm # Adicionado para linkar a biblioteca matemática, se necessário
+CFLAGS = -Wall -Iinclude -pthread
+LDFLAGS = -lm  -pthread# Adicionado para linkar a biblioteca matemática, se necessário
 
 # Arquivos fonte (verifique se processoControle.c é realmente necessário ou se lista.c deve ser incluído)
 # Assumindo que lista.c é necessário e processoControle.c não é diretamente usado pelo main

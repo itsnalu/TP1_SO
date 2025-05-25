@@ -1,19 +1,20 @@
 #ifndef PROCESSO_SIMULADO_H
 #define PROCESSO_SIMULADO_H
 
-#include "config.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "config.h" // Para MAX_NOME_ARQUIVO_R e outras constantes
+#include <pthread.h> // Para pthread_t
 
 // Define os possíveis estados de um processo simulado.
 typedef enum {
+    EST_NOVO,       // Processo recém-criado, ainda não na fila de prontos ou totalmente configurado
     EST_PRONTO,     // Aguardando para usar a CPU
-    EST_EXECUCAO,   // Atualmente utilizando a CPU
+    EST_EXECUCAO,   // Atualmente utilizando a CPU (sua thread está rodando)
     EST_BLOQUEADO,  // Aguardando um evento externo (ex: I/O simulado pela instrução 'B')
     EST_TERMINADO   // Execução concluída ou abortada
 } EstadoProcesso_e;
+
+// Função para converter o enum do estado para string (útil para logs)
+const char* estadoParaString(EstadoProcesso_e estado);
 
 // Representa uma única instrução do programa de um processo simulado.
 typedef struct {
@@ -35,6 +36,9 @@ typedef struct {
     int tamanho;
 } ListaInstrucoes_t;
 
+// Forward declaration para a estrutura GerenciadorDeProcessos_s
+struct GerenciadorDeProcessos_s;
+
 // Estrutura principal que define um processo simulado.
 typedef struct ProcessoSimulado_s {
     int pid;                // Identificador único do processo
@@ -51,40 +55,37 @@ typedef struct ProcessoSimulado_s {
     long tempo_chegada_sistema;     // Momento da criação ou primeira vez pronto
     long tempo_total_cpu_usado;     // Tempo total de CPU consumido pelo processo
     int tempo_restante_bloqueio;    // Unidades de tempo restantes para o bloqueio (instrução 'B')
-    int tempo_usado_no_quantum_atual; // Tempo de CPU usado na fatia de tempo corrente
+    
+    int quantum_alocado_atual;      // Quantum que o escalonador concedeu para esta execução
+    int tempo_usado_no_quantum_atual; // Tempo de CPU usado na fatia de tempo corrente (incrementado pela thread)
 
-    int numProcessos; // Número de processos filhos criados por este processo
+    // int numProcessos; // Campo original da versão "Ana". Removido para resolver Erro 3, a menos que seja necessário.
 
-    pthread_t thread; // Thread associada ao processo
+    pthread_t thread; // Thread POSIX associada a este processo simulado
 
 } ProcessoSimulado_t;
 
-// --- Funções de Lista de Instruções (uso interno e para 'F') ---
+// Estrutura para passar argumentos para a thread do processo
+typedef struct {
+    ProcessoSimulado_t* processo;
+    struct GerenciadorDeProcessos_s* gerenciador; 
+} ThreadArgs_t;
+
+
+// --- Funções de Lista de Instruções ---
 void psInicializarListaInstrucoes(ListaInstrucoes_t *lista);
 void psLiberarListaInstrucoes(ListaInstrucoes_t *lista);
 void psInserirInstrucao(ListaInstrucoes_t *lista, Instrucao_t inst);
-void psCopiarListaInstrucoes(ListaInstrucoes_t *destino, const ListaInstrucoes_t *origem); // Cópia profunda para 'F'
+void psCopiarListaInstrucoes(ListaInstrucoes_t *destino, const ListaInstrucoes_t *origem);
 
-// --- Funções Principais do Processo Simulado (interface para o Gerenciador) ---
-
-// Aloca e inicializa uma nova estrutura ProcessoSimulado_t.
-ProcessoSimulado_t* psCriarNovo(int pid_sugerido, int pid_pai, int prioridade_inicial, long tempo_criacao);
-
-// Carrega o programa de um arquivo para a lista de instruções do processo.
-// Limpa o programa anterior e reseta PC/memória (usado para 'R' e carga inicial).
+// --- Funções Principais do Processo Simulado ---
+ProcessoSimulado_t* psCriarNovo(int pid_pai, int prioridade_sugerida, long tempo_criacao);
 void psCarregarProgramaDeArquivo(ProcessoSimulado_t *p, const char* nome_arquivo_programa);
-
-// Libera a memória alocada para um ProcessoSimulado_t, incluindo sua lista de instruções.
 void psLiberarMemoria(ProcessoSimulado_t *p);
 
-// Executa a próxima instrução do processo 'p' apontada pelo seu PC.
-// Atualiza o estado do processo (p->estado_atual) e o PC conforme a instrução.
-// Se a instrução for 'F', aloca um novo processo filho e o retorna via 'novo_processo_filho_ptr'.
-// O chamador (Gerenciador) é responsável por gerenciar o 'novo_processo_filho_ptr'.
-void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulador, ProcessoSimulado_t **novo_processo_filho_ptr);
+// Instrucao_t* psObterInstrucaoNoPc(const ProcessoSimulado_t *p); // REMOVIDO O PROTÓTIPO DAQUI
 
-void psImprimirInstrucoes(const ProcessoSimulado_t *p); // Função para debug
-
+void psImprimirInstrucoes(const ProcessoSimulado_t *p);
 void* psExecutarProcesso(void* arg);
 
 #endif // PROCESSO_SIMULADO_H

@@ -1,174 +1,258 @@
-#include "../include/config.h"
-#include "../include/gerenciador.h"
-// #include "../include/processos.h" // Aparentemente não é mais necessário se Processos e criarNovoProcesso não são usados aqui
-#include "../include/cpu.h"
-#include "../include/estados.h"
-#include "../include/fila.h"
-#include "../include/processoImpressao.h"
-#include "../include/processoSimulado.h" // Essencial para psCriarNovo e psCarregarProgramaDeArquivo
+#include "../include/config.h"          // Para ARQUIVO_INIT_PROGRAMA, MAX_CMD_LEN, e declarações extern de mutexes
+#include "../include/gerenciador.h"      // Para gerenciadorProcessosSimulados
+#include "../include/processoSimulado.h" // Para psCriarNovo, psCarregarProgramaDeArquivo, psLiberarMemoria
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <unistd.h>           
+#include <sys/types.h>        
+#include <sys/wait.h>         
+#include <pthread.h>          
+
+// Definição dos mutexes globais (declarados 'extern' em config.h)
+pthread_mutex_t impressao_mutex;
+pthread_mutex_t prontos_mutex;
+pthread_mutex_t bloqueados_mutex;
+pthread_mutex_t tabela_processos_mutex;
 
 int main(void) {
     // Apresentação inicial
-    printf("\n===== Simulador de Gerenciamento de Processos =====\n\n");
+    printf("\n===== Simulador de Gerenciamento de Processos (Modelo Threads com MLFQ) =====\n\n");
 
-    // 1. Inicialização
-    int fd[2]; // Descritores do pipe
-    pid_t pid;   // PID para o fork
+    // 1. Inicialização de Mutexes Globais
+    if (pthread_mutex_init(&impressao_mutex, NULL) != 0) {
+        perror("MAIN ERRO: Falha ao inicializar impressao_mutex");
+        exit(EXIT_FAILURE);
+    }
+    if (pthread_mutex_init(&prontos_mutex, NULL) != 0) {
+        perror("MAIN ERRO: Falha ao inicializar prontos_mutex");
+        pthread_mutex_destroy(&impressao_mutex); 
+        exit(EXIT_FAILURE);
+    }
+    if (pthread_mutex_init(&bloqueados_mutex, NULL) != 0) {
+        perror("MAIN ERRO: Falha ao inicializar bloqueados_mutex");
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        exit(EXIT_FAILURE);
+    }
+    if (pthread_mutex_init(&tabela_processos_mutex, NULL) != 0) {
+        perror("MAIN ERRO: Falha ao inicializar tabela_processos_mutex");
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        exit(EXIT_FAILURE);
+    }
+    printf("[Main] Mutexes globais inicializados.\n");
 
-    // Cria o pipe para comunicação entre Controle e Gerenciador
-    if (pipe(fd) < 0) {
-        perror("Erro ao criar pipe");
+    // 2. Configuração do Pipe e Leitura de Configurações Iniciais
+    int fd_pipe[2]; 
+    pid_t pid_filho_gerenciador;
+
+    if (pipe(fd_pipe) < 0) {
+        perror("MAIN ERRO: Falha ao criar pipe");
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
         exit(EXIT_FAILURE);
     }
 
-    // 2. Configuração do Processo Inicial e Comandos
-    FILE *entrada_comandos = NULL; // Stream para ler os comandos (teclado ou arquivo)
-    char origem_comandos;      // 'T' para teclado, 'F' para arquivo
+    FILE *entrada_comandos_stream = NULL; 
+    char origem_comandos_char;      
 
-    // Define o nome do arquivo de instruções para o processo inicial
-    char nomeArquivoInst[128];
-    printf("Digite o nome do arquivo que contém as instruções para o processo inicial (ou Enter para usar '%s'): ", ARQUIVO_INIT_PROGRAMA);
-    fgets(nomeArquivoInst, sizeof(nomeArquivoInst), stdin);
-    nomeArquivoInst[strcspn(nomeArquivoInst, "\n")] = '\0'; // Remove o newline
-
-    if (strlen(nomeArquivoInst) == 0) {
-        strncpy(nomeArquivoInst, ARQUIVO_INIT_PROGRAMA, sizeof(nomeArquivoInst) -1);
-        nomeArquivoInst[sizeof(nomeArquivoInst) - 1] = '\0'; // Garante terminação nula
-        printf("Usando arquivo de instruções padrão: %s\n", nomeArquivoInst);
-    }
-
-    // Verifica brevemente se o arquivo de instruções é acessível
-    FILE *teste_arq_inst = fopen(nomeArquivoInst, "r");
-    if (!teste_arq_inst) {
-        perror("Erro ao tentar acessar arquivo de instruções iniciais");
-        close(fd[0]);
-        close(fd[1]);
+    char nome_arquivo_instrucoes_inicial[256]; 
+    printf("Digite o nome do arquivo que contém as instruções para o processo inicial (Enter para usar '%s'): ", ARQUIVO_INIT_PROGRAMA);
+    if (fgets(nome_arquivo_instrucoes_inicial, sizeof(nome_arquivo_instrucoes_inicial), stdin) == NULL) {
+        fprintf(stderr, "MAIN ERRO: Falha ao ler nome do arquivo de instruções iniciais.\n");
+        close(fd_pipe[0]); close(fd_pipe[1]);
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
         exit(EXIT_FAILURE);
     }
-    fclose(teste_arq_inst);
+    nome_arquivo_instrucoes_inicial[strcspn(nome_arquivo_instrucoes_inicial, "\n\r")] = '\0'; 
 
-    // Cria a estrutura para o primeiro processo simulado (PID 0)
-    ProcessoSimulado_t *processo_inicial = psCriarNovo(0, -1, 0, 0L);
-    if (!processo_inicial) {
-        fprintf(stderr, "Erro crítico: Falha ao alocar memória para o processo inicial.\n");
+    if (strlen(nome_arquivo_instrucoes_inicial) == 0) {
+        strncpy(nome_arquivo_instrucoes_inicial, ARQUIVO_INIT_PROGRAMA, sizeof(nome_arquivo_instrucoes_inicial) -1);
+        nome_arquivo_instrucoes_inicial[sizeof(nome_arquivo_instrucoes_inicial) - 1] = '\0'; 
+    }
+    printf("Usando arquivo de instruções para processo inicial: %s\n", nome_arquivo_instrucoes_inicial);
+
+    FILE *teste_arq_inst_fp = fopen(nome_arquivo_instrucoes_inicial, "r");
+    if (!teste_arq_inst_fp) {
+        perror("MAIN ERRO: Não foi possível abrir o arquivo de instruções iniciais especificado");
+        fprintf(stderr, " -> Arquivo tentado: %s\n", nome_arquivo_instrucoes_inicial);
+        close(fd_pipe[0]); close(fd_pipe[1]);
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
         exit(EXIT_FAILURE);
     }
+    fclose(teste_arq_inst_fp);
 
-    // Carrega o programa para o processo inicial
-    psCarregarProgramaDeArquivo(processo_inicial, nomeArquivoInst);
-    if (processo_inicial->listaInstrucoes.tamanho == 0 && processo_inicial->estado_atual == EST_TERMINADO) {
-        fprintf(stderr, "Falha ao carregar instruções do arquivo '%s' para o processo inicial.\n", nomeArquivoInst);
-        psLiberarMemoria(processo_inicial);
+    // 3. Criação da Informação do Processo Inicial (Temporário)
+    ProcessoSimulado_t *processo_inicial_info = psCriarNovo(-1, 0, 0L); 
+    if (!processo_inicial_info) {
+        fprintf(stderr, "MAIN ERRO CRÍTICO: Falha ao alocar memória para informações do processo inicial.\n");
+        close(fd_pipe[0]); close(fd_pipe[1]);
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
         exit(EXIT_FAILURE);
     }
-    printf("Programa inicial '%s' carregado: %d instruções.\n", nomeArquivoInst, processo_inicial->listaInstrucoes.tamanho);
+    
+    psCarregarProgramaDeArquivo(processo_inicial_info, nome_arquivo_instrucoes_inicial);
+    if (processo_inicial_info->estado_atual == EST_TERMINADO || processo_inicial_info->listaInstrucoes.tamanho == 0) {
+        fprintf(stderr, "MAIN ERRO: Falha ao carregar instruções de '%s' para o processo inicial, ou o arquivo está vazio/inválido.\n", nome_arquivo_instrucoes_inicial);
+        psLiberarMemoria(processo_inicial_info); 
+        close(fd_pipe[0]); close(fd_pipe[1]);
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
+        exit(EXIT_FAILURE);
+    }
+    printf("[Main] Programa '%s' carregado com %d instruções para a struct temporária do processo inicial.\n",
+           nome_arquivo_instrucoes_inicial, processo_inicial_info->listaInstrucoes.tamanho);
 
-    // Determina a origem dos comandos (teclado ou arquivo)
     printf("\nDeseja ler comandos do teclado (T) ou de um arquivo (F)? ");
-    if (scanf(" %c", &origem_comandos) != 1) {
-         fprintf(stderr, "Entrada inválida para origem dos comandos.\n");
-         psLiberarMemoria(processo_inicial);
+    char buffer_escolha_origem_cmd[10]; 
+    if (fgets(buffer_escolha_origem_cmd, sizeof(buffer_escolha_origem_cmd), stdin) == NULL) {
+         fprintf(stderr, "MAIN ERRO: Falha ao ler escolha da origem dos comandos.\n");
+         psLiberarMemoria(processo_inicial_info);
+         close(fd_pipe[0]); close(fd_pipe[1]);
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
          exit(EXIT_FAILURE);
     }
-    while (getchar() != '\n'); // Limpa o buffer do stdin (consome o newline do scanf)
+    origem_comandos_char = buffer_escolha_origem_cmd[0]; 
 
-    if (origem_comandos == 'F' || origem_comandos == 'f') {
-        char nomeArquivoCmd[128];
-        printf("Digite o nome do arquivo de comandos (ou Enter para usar 'comandos.txt'): ");
-        fgets(nomeArquivoCmd, sizeof(nomeArquivoCmd), stdin);
-        nomeArquivoCmd[strcspn(nomeArquivoCmd, "\n")] = '\0';
-
-        if (strlen(nomeArquivoCmd) == 0) {
-            strcpy(nomeArquivoCmd, "comandos.txt");
-            printf("Usando arquivo de comandos padrão: %s\n", nomeArquivoCmd);
-        }
-
-        entrada_comandos = fopen(nomeArquivoCmd, "r");
-        if (!entrada_comandos) {
-            perror("Erro ao abrir arquivo de comandos");
-            psLiberarMemoria(processo_inicial);
-            close(fd[0]);
-            close(fd[1]);
+    if (origem_comandos_char == 'F' || origem_comandos_char == 'f') {
+        char nome_arquivo_comandos_str[256]; 
+        printf("Digite o nome do arquivo de comandos (Enter para usar 'comandos.txt'): ");
+        if (fgets(nome_arquivo_comandos_str, sizeof(nome_arquivo_comandos_str), stdin) == NULL) {
+            fprintf(stderr, "MAIN ERRO: Falha ao ler nome do arquivo de comandos.\n");
+            psLiberarMemoria(processo_inicial_info);
+            close(fd_pipe[0]); close(fd_pipe[1]);
+            pthread_mutex_destroy(&impressao_mutex);
+            pthread_mutex_destroy(&prontos_mutex);
+            pthread_mutex_destroy(&bloqueados_mutex);
+            pthread_mutex_destroy(&tabela_processos_mutex);
             exit(EXIT_FAILURE);
         }
-        printf("Lendo comandos do arquivo: %s\n", nomeArquivoCmd);
+        nome_arquivo_comandos_str[strcspn(nome_arquivo_comandos_str, "\n\r")] = '\0';
+
+        if (strlen(nome_arquivo_comandos_str) == 0) {
+            strcpy(nome_arquivo_comandos_str, "comandos.txt"); 
+        }
+        printf("Usando arquivo de comandos: %s\n", nome_arquivo_comandos_str);
+
+        entrada_comandos_stream = fopen(nome_arquivo_comandos_str, "r");
+        if (!entrada_comandos_stream) {
+            perror("MAIN ERRO: Falha ao abrir arquivo de comandos especificado");
+            fprintf(stderr, " -> Arquivo tentado: %s\n", nome_arquivo_comandos_str);
+            psLiberarMemoria(processo_inicial_info);
+            close(fd_pipe[0]); close(fd_pipe[1]);
+            pthread_mutex_destroy(&impressao_mutex);
+            pthread_mutex_destroy(&prontos_mutex);
+            pthread_mutex_destroy(&bloqueados_mutex);
+            pthread_mutex_destroy(&tabela_processos_mutex);
+            exit(EXIT_FAILURE);
+        }
     } else {
-        entrada_comandos = stdin;
-        printf("\nDigite os comandos (U, I, M), um por linha. (Ctrl+D para encerrar no Linux, Ctrl+Z Enter no Windows):\n");
+        entrada_comandos_stream = stdin;
+        printf("[Main] Digite os comandos (U, I, M), um por linha.\n(Ctrl+D para encerrar no Linux/macOS, Ctrl+Z Enter no Windows):\n");
     }
 
-    // 3. Criação do Processo Gerenciador
-    printf("\nIniciando simulação e criando Processo Gerenciador...\n");
-    fflush(stdout); // Garante que a saída seja impressa antes do fork
-    pid = fork();
+    printf("\n[Main] Iniciando simulação e criando Processo Gerenciador (via fork)...\n");
+    fflush(stdout); 
+    pid_filho_gerenciador = fork();
 
-    if (pid < 0) {
-        perror("Erro ao criar processo gerenciador (fork)");
-        if (entrada_comandos != stdin) fclose(entrada_comandos);
-        psLiberarMemoria(processo_inicial);
-        close(fd[0]);
-        close(fd[1]);
+    if (pid_filho_gerenciador < 0) {
+        perror("MAIN ERRO: Falha ao criar processo gerenciador (fork)");
+        if (entrada_comandos_stream != stdin && entrada_comandos_stream != NULL) fclose(entrada_comandos_stream);
+        psLiberarMemoria(processo_inicial_info);
+        close(fd_pipe[0]); close(fd_pipe[1]);
+        pthread_mutex_destroy(&impressao_mutex);
+        pthread_mutex_destroy(&prontos_mutex);
+        pthread_mutex_destroy(&bloqueados_mutex);
+        pthread_mutex_destroy(&tabela_processos_mutex);
         exit(EXIT_FAILURE);
     }
 
-    if (pid == 0) {
-        // PROCESSO FILHO: Gerenciador de Processos
-        close(fd[1]);
-        gerenciadorProcessosSimulados(fd[0], processo_inicial);
-        close(fd[0]);
-        printf("[Processo Gerenciador PID %d] Finalizado.\n", getpid());
-        exit(EXIT_SUCCESS);
-    } else {
-        // PROCESSO PAI: Controle
-        close(fd[0]);
+    if (pid_filho_gerenciador == 0) {
+        close(fd_pipe[1]); 
+        gerenciadorProcessosSimulados(fd_pipe[0], processo_inicial_info);
+        close(fd_pipe[0]); 
+        exit(EXIT_SUCCESS); 
+    } else { 
+        close(fd_pipe[0]); 
+        processo_inicial_info = NULL; 
 
-        char buffer_comando[MAX_CMD_LEN];
+        char linha_lida_do_input[MAX_CMD_LEN + 2];      
+        char comando_para_pipe[MAX_CMD_LEN + 2];
+
         printf("[Processo Controle] Enviando comandos para o Gerenciador...\n");
 
-        while (fgets(buffer_comando, sizeof(buffer_comando), entrada_comandos)) {
-            buffer_comando[strcspn(buffer_comando, "\r\n")] = 0;
+        while (fgets(linha_lida_do_input, sizeof(linha_lida_do_input), entrada_comandos_stream)) {
+            linha_lida_do_input[strcspn(linha_lida_do_input, "\r\n")] = 0; // Remove newline/CR da linha lida
 
-            if (strlen(buffer_comando) == 0) continue;
-
-            if (buffer_comando[0] != 'U' && buffer_comando[0] != 'I' && buffer_comando[0] != 'M') {
-                printf("[Processo Controle] Comando inválido ignorado: '%s'\n", buffer_comando);
+            if (strlen(linha_lida_do_input) == 0) continue; // Ignora linhas vazias
+            
+            // Validação do primeiro caractere do comando original
+            if (linha_lida_do_input[0] != 'U' && linha_lida_do_input[0] != 'I' && linha_lida_do_input[0] != 'M') {
+                printf("[Processo Controle] Comando inválido ('%s') lido e ignorado.\n", linha_lida_do_input);
                 continue;
             }
-
-            // Adiciona newline para garantir que fgets no gerenciador leia uma linha completa
-            char comando_com_newline[MAX_CMD_LEN + 2]; // +1 para newline, +1 para null terminator
-            snprintf(comando_com_newline, sizeof(comando_com_newline), "%s\n", buffer_comando);
             
-            if (write(fd[1], comando_com_newline, strlen(comando_com_newline)) < 0) {
-                perror("[Processo Controle] Erro ao escrever no pipe");
+            if (strlen(linha_lida_do_input) > MAX_CMD_LEN) {
+                linha_lida_do_input[MAX_CMD_LEN] = '\0'; 
+            }
+            
+            int chars_escritos = snprintf(comando_para_pipe, sizeof(comando_para_pipe), "%s\n", linha_lida_do_input);
+
+            // Verificação adicional (opcional, para robustez extrema)
+            if (chars_escritos < 0 || (size_t)chars_escritos >= sizeof(comando_para_pipe)) {
+                fprintf(stderr, "MAIN ERRO (Controle): Erro ou truncamento ao formatar comando para o pipe com snprintf.\n");
+                // Lidar com o erro, talvez parar de enviar comandos
+                break;
+            }
+            
+            if (write(fd_pipe[1], comando_para_pipe, strlen(comando_para_pipe)) < 0) {
+                perror("MAIN ERRO (Controle): Falha ao escrever no pipe para o gerenciador");
                 break; 
             }
-
-            if (buffer_comando[0] == 'M') {
-                printf("[Processo Controle] Comando final 'M' enviado.\n");
-                break; // Encerra o loop de envio após o comando 'M'
+            
+            // Verifica o comando original (sem o newline adicionado) para 'M'
+            if (linha_lida_do_input[0] == 'M' && strlen(linha_lida_do_input) == 1) { 
+                printf("[Processo Controle] Comando final 'M' enviado para o Gerenciador.\n");
+                break; 
             }
         }
+        // **** FIM DA CORREÇÃO REFINADA DO SNPRINTF ****
 
-        // 5. Finalização do Processo Controle
-        printf("[Processo Controle] Todos os comandos foram enviados. Fechando pipe de escrita.\n");
-        close(fd[1]); // Fecha a extremidade de escrita. Isso enviará EOF ao leitor (gerenciador) se ele ainda estiver lendo.
-
-        if (entrada_comandos != stdin) {
-            fclose(entrada_comandos);
+        close(fd_pipe[1]); 
+        if (entrada_comandos_stream != stdin && entrada_comandos_stream != NULL) {
+            fclose(entrada_comandos_stream);
         }
 
-        printf("[Processo Controle] Aguardando o Processo Gerenciador (PID %d) finalizar...\n", pid);
-        wait(NULL);
+        printf("[Processo Controle] Aguardando o Processo Gerenciador (PID OS %d) finalizar...\n", pid_filho_gerenciador);
+        wait(NULL); 
         
-        printf("\n===== Simulação Concluída. Processo Controle Encerrado. =====\n");
+        printf("\n===== Simulação Concluída. Processo Controle (PID OS %d) Encerrado. =====\n", getpid());
     }
+
+    printf("[Main] Destruindo mutexes globais...\n");
+    pthread_mutex_destroy(&impressao_mutex);
+    pthread_mutex_destroy(&prontos_mutex);
+    pthread_mutex_destroy(&bloqueados_mutex);
+    pthread_mutex_destroy(&tabela_processos_mutex);
+    printf("[Main] Mutexes globais destruídos.\n");
 
     return 0;
 }

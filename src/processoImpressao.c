@@ -1,171 +1,272 @@
-#include "../include/processoImpressao.h"
+#include "../include/processoImpressao.h" // Para ImpressaoArgs_t e protótipos
+#include "../include/gerenciador.h"      // Para a definição completa de GerenciadorDeProcessos_t
+#include "../include/processoSimulado.h" // Para ProcessoSimulado_t e estadoParaString()
+#include "../include/config.h"           // Para NUM_NIVEIS_PRIORIDADE e mutexes globais (impressao_mutex, etc.)
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
-#include <time.h>
+#include <unistd.h>  // Para usleep 
+#include <pthread.h> // Para todas as funções de thread e mutex
 
-void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
-    // Cria uma nova thread para impressão
-    pthread_t thread_impressao;
-    ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
-    if (!impressao) {
-        perror("Erro ao alocar memória para processo de impressão");
+// Função wrapper que será executada pela thread de impressão.
+// Ela lida com o mutex de impressão e chama a função de impressão apropriada.
+static void* threadFuncaoImpressaoWrapper(void* arg) {
+    ImpressaoArgs_t *args = (ImpressaoArgs_t*) arg;
+    if (!args || !args->gerenciador) {
+        fprintf(stderr, "IMPRESSAO ERRO: Argumentos inválidos recebidos pela thread de impressão.\n");
+        if (args) free(args); // Libera args se foi alocado mas é inválido
+        pthread_exit(NULL);
+    }
+
+    // Copia os dados dos argumentos para variáveis locais
+    struct GerenciadorDeProcessos_s *gerenciador = args->gerenciador;
+    int tipo = args->tipo_impressao;
+    
+    // Libera a memória da estrutura de argumentos, pois seus dados já foram copiados.
+    free(args);
+
+    // Adquire o mutex de impressão para garantir exclusividade na saída
+    if (pthread_mutex_lock(&impressao_mutex) != 0) {
+        perror("IMPRESSAO ERRO: Falha ao bloquear impressao_mutex na thread de impressão");
+        pthread_exit(NULL);
+    }
+
+    // Chama a função de impressão apropriada com base no tipo
+    if (tipo == 0) { // Impressão de estado atual
+        processoImpressaoImprimirEstado(gerenciador);
+    } else { // Impressão de estatísticas finais (tipo == 1)
+        processoImpressaoImprimirEstatisticas(gerenciador);
+    }
+
+    // Libera o mutex de impressão
+    if (pthread_mutex_unlock(&impressao_mutex) != 0) {
+        perror("IMPRESSAO ERRO: Falha ao desbloquear impressao_mutex na thread de impressão");
+    }
+    // printf("[Impressao Thread] Mutex de impressão liberado.\n");
+    
+    pthread_exit(NULL); // Encerra a thread de impressão
+}
+
+// Inicia o processo de impressão criando uma thread dedicada.
+void processoImpressaoIniciar(struct GerenciadorDeProcessos_s *gerenciador, int tipo_impressao) {
+    if (!gerenciador) {
+        fprintf(stderr, "IMPRESSAO ERRO: Gerenciador nulo ao tentar iniciar impressão.\n");
         return;
     }
 
-    impressao->tipo_impressao = tipo_impressao;
-    impressao->gerenciador = gerenciador;
+    pthread_t thread_id_impressao;
+    // Aloca memória para os argumentos da thread de impressão
+    ImpressaoArgs_t *args = (ImpressaoArgs_t*)malloc(sizeof(ImpressaoArgs_t));
 
-    // Tenta adquirir o semáforo com timeout
-    struct timespec timeout;
-    clock_gettime(CLOCK_REALTIME, &timeout);
-    timeout.tv_sec += 5; // 5 segundos de timeout
+    if (!args) {
+        perror("IMPRESSAO ERRO: Falha ao alocar memória para ImpressaoArgs_t");
+        return;
+    }
+    // Preenche os argumentos
+    args->gerenciador = gerenciador;
+    args->tipo_impressao = tipo_impressao;
 
-    if (sem_timedwait(&gerenciador->sem_impressao, &timeout) == 0) {
-        if (pthread_create(&thread_impressao, NULL, executarImpressaoThread, impressao) != 0) {
-            perror("Erro ao criar thread de impressão");
-            sem_post(&gerenciador->sem_impressao);
-            free(impressao);
-            return;
-        }
-
-        // Se for comando M, espera a thread terminar
-        if (tipo_impressao == 1) {
-            if (pthread_join(thread_impressao, NULL) != 0) {
-                perror("Erro ao aguardar thread de impressão");
-            }
-        } else {
-            // Para comando I, detacha a thread para não precisar fazer join depois
-            if (pthread_detach(thread_impressao) != 0) {
-                perror("Erro ao detachar thread de impressão");
-            }
-        }
+    // printf("[Impressao Iniciar] Tentando criar thread de impressão (Tipo: %d).\n", tipo_impressao);
+    // Cria a thread de impressão
+    if (pthread_create(&thread_id_impressao, NULL, threadFuncaoImpressaoWrapper, (void*)args) != 0) {
+        perror("IMPRESSAO ERRO: Falha ao criar thread de impressão");
+        free(args); // Libera args se a criação da thread falhar
     } else {
-        printf("Timeout ao tentar adquirir semáforo de impressão\n");
-        free(impressao);
+        // Destaca a thread para que seus recursos sejam liberados automaticamente ao terminar.
+        // O gerenciador não precisará fazer pthread_join nela.
+        if (pthread_detach(thread_id_impressao) != 0) {
+            perror("IMPRESSAO AVISO: Falha ao destacar (detach) thread de impressão");
+            // Não é fatal, mas pode levar a recursos presos se o join não for feito em algum momento.
+        }
+        // printf("[Impressao Iniciar] Thread de impressão (Tipo: %d) criada e destacada.\n", tipo_impressao);
     }
 }
 
-void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
-    printf("\n╔════════════════════════════════╗");
-    printf("\n║   ESTADO ATUAL DO SISTEMA      ║");
-    printf("\n╚════════════════════════════════╝\n");
-
-    printf("\n┌────────────────────────────────┐");
-    printf("\n│ Tempo Global: %-16ld │", impressao->gerenciador->tempo_simulacao_global);
-    printf("\n└────────────────────────────────┘");
-
-    printf("\n\n┌───── CPU ──────────────────────┐");
-    if (impressao->gerenciador->cpu_sistema.processo_atual) {
-        ProcessoSimulado_t *proc_atual = impressao->gerenciador->cpu_sistema.processo_atual;
-        printf("\n│ Processo Atual: PID %-10d │", proc_atual->pid);
-        printf("\n│ PC: %-26d │", proc_atual->pc);
-        printf("\n│ Quantum Total: %-15d │", impressao->gerenciador->cpu_sistema.quantum_total_alocado);
-        printf("\n│ Tempo Executado: %-13d │", impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
-    } else {
-        printf("\n│          CPU OCIOSA            │");
+// Imprime o estado atual do sistema (chamada pela thread de impressão).
+void processoImpressaoImprimirEstado(struct GerenciadorDeProcessos_s *gerenciador) {
+    if (!gerenciador) {
+        printf("\nIMPRESSAO ERRO: Ponteiro do gerenciador nulo para imprimir estado.\n");
+        return;
     }
+
+    // O impressao_mutex já foi adquirido pela threadFuncaoImpressaoWrapper.
+
+    printf("\n╔═════════════════════════════════════════════════════════════════════════════╗");
+    printf("\n║                        ESTADO ATUAL DO SISTEMA                              ║");
+    printf("\n╚═════════════════════════════════════════════════════════════════════════════╝\n");
+
+    // Acesso seguro ao tempo global e ao processo ativo
+    pthread_mutex_lock(&tabela_processos_mutex); 
+    printf("\n┌────────────────────────────────┐");
+    printf("\n│ Tempo Global: %-16ld │", gerenciador->tempo_simulacao_global);
     printf("\n└────────────────────────────────┘");
 
-#ifdef USE_FIFO
-    printf("\nProcessos Prontos (Fila FIFO):\n");
-    FilaProcessos_t *fila_fifo = &impressao->gerenciador->processos_prontos.fila_fifo;
-    if (!filaEstaVazia(fila_fifo)) {
-        int idx = fila_fifo->inicio_fila;
-        int count = 0;
-        while (count < fila_fifo->tamanho) {
-            int pid = fila_fifo->elementos[idx];
-            if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
-                ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
-                if (p->estado_atual == EST_PRONTO) { // Verifica se realmente está PRONTO
-                    printf("    PID %d (PC: %d, Tempo CPU: %ld)\n",
-                           p->pid, p->pc, p->tempo_total_cpu_usado);
-                }
-            }
-            idx = (idx + 1) % fila_fifo->capacidade;
-            count++;
+    printf("\n\n┌───── CPU ATIVA (Processo Despachado pela Thread do Gerenciador) ───────────┐");
+    int pid_ativo = gerenciador->processo_ativo_pid; 
+    
+    if (pid_ativo != -1 && gerenciador->slot_tabela_ocupado[pid_ativo]) {
+        ProcessoSimulado_t *proc_atual = &gerenciador->tabela_de_processos[pid_ativo];
+        if (proc_atual->estado_atual == EST_EXECUCAO) {
+            // MODIFICAÇÃO AQUI: Remover (SysThreadID 0x%lx)
+            printf("\n│ Processo Ativo: PID %-3d                              │", proc_atual->pid); // SysThreadID removido
+            printf("\n│ PC: %-10d Prioridade Atual: %-1d          │", proc_atual->pc, proc_atual->prioridade);
+            printf("\n│ Quantum Concedido: %-3d Usado: %-3d              │", proc_atual->quantum_alocado_atual, proc_atual->tempo_usado_no_quantum_atual);
+            printf("\n│ Tempo Total de CPU Acumulado: %-10ld         │", proc_atual->tempo_total_cpu_usado);
+        } else {
+             printf("\n│ PID %-3d marcado como ativo, mas estado é %-10s ! │", pid_ativo, estadoParaString(proc_atual->estado_atual));
         }
     } else {
-        printf("    Nenhum processo na fila FIFO\n");
+        printf("\n│                 CPU OCIOSA (Nenhuma thread de processo ativa)             │");
     }
-#else
-    printf("\nProcessos Prontos:\n");
+    printf("\n└─────────────────────────────────────────────────────────────────────────────┘");
+    pthread_mutex_unlock(&tabela_processos_mutex);
+
+
+    // Imprime Filas de Processos Prontos
+    printf("\n\nFILAS DE PROCESSOS PRONTOS (Escalonador MLFQ):\n");
+    pthread_mutex_lock(&prontos_mutex); // Protege o acesso às filas de prontos
+    int total_processos_prontos = 0;
     for (int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++) {
-        printf("  Prioridade %d:\n", i);
-        FilaProcessos_t *fila_prioridade = &impressao->gerenciador->processos_prontos.filas_por_prioridade[i];
-        if (!filaEstaVazia(fila_prioridade)) {
-            int idx = fila_prioridade->inicio_fila;
-            int count = 0;
-            while (count < fila_prioridade->tamanho) {
-                int pid = fila_prioridade->elementos[idx];
-                if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
-                    ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
-                     if (p->estado_atual == EST_PRONTO) { // Verifica se realmente está PRONTO
-                        printf("    PID %d (PC: %d, Prioridade: %d, Tempo CPU: %ld)\n",
-                               p->pid, p->pc, p->prioridade, p->tempo_total_cpu_usado);
-                    }
+        printf("  Prioridade %d: ", i);
+        FilaProcessos_t *fila_prio_atual = &gerenciador->processos_prontos.filas_por_prioridade[i];
+        if (!filaEstaVazia(fila_prio_atual)) {
+            printf("(%d processos)\n", fila_prio_atual->tamanho);
+            int idx_fila = fila_prio_atual->inicio_fila;
+            for (int count = 0; count < fila_prio_atual->tamanho; count++) {
+                int pid_na_fila = fila_prio_atual->elementos[idx_fila];
+                total_processos_prontos++;
+                
+                pthread_mutex_lock(&tabela_processos_mutex); // Bloqueia para ler detalhes do processo
+                if (pid_na_fila >= 0 && pid_na_fila < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && gerenciador->slot_tabela_ocupado[pid_na_fila]) {
+                    ProcessoSimulado_t *p_pronto = &gerenciador->tabela_de_processos[pid_na_fila];
+                    printf("    -> PID %-3d (PC: %-3d, Chegada: %-3ld, CPU Time: %ld)\n",
+                           p_pronto->pid, p_pronto->pc, p_pronto->tempo_chegada_sistema, p_pronto->tempo_total_cpu_usado);
+                } else {
+                     printf("    -> PID %-3d (INVÁLIDO ou slot não ocupado na tabela de processos)\n", pid_na_fila);
                 }
-                idx = (idx + 1) % fila_prioridade->capacidade;
-                count++;
+                pthread_mutex_unlock(&tabela_processos_mutex); // Libera após ler detalhes
+                idx_fila = (idx_fila + 1) % fila_prio_atual->capacidade;
             }
         } else {
-            printf("    Nenhum processo\n");
+            printf("Vazia.\n");
         }
     }
-#endif
+    if(total_processos_prontos == 0) {
+        printf("  (Nenhum processo pronto em nenhuma das filas de prioridade)\n");
+    }
+    pthread_mutex_unlock(&prontos_mutex); // Libera o acesso às filas de prontos
+    printf("-----------------------------------------------------------------------------------\n");
 
-    printf("\nProcessos Bloqueados:\n");
-    FilaProcessos_t *fila_bloqueados = &impressao->gerenciador->processos_bloqueados.fila_geral_bloqueados;
-    if (!filaEstaVazia(fila_bloqueados)) {
-        int idx = fila_bloqueados->inicio_fila;
-        int count = 0;
-        // Itera sobre uma cópia dos PIDs ou de forma cuidadosa se a fila puder ser modificada por outro thread
-        // Para a impressão, a iteração simples deve ser segura, pois a fila não é modificada *durante* esta função de impressão.
-        while (count < fila_bloqueados->tamanho) {
-            int pid = fila_bloqueados->elementos[idx];
-            if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
-                ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[pid];
-                // Ele poderia ter sido despertado e movido para pronto entre a última ação e a impressão,
-                // embora com 'U' sendo a unidade de tempo, isso é menos provável de ser um problema de corrida aqui.
-                if (p->estado_atual == EST_BLOQUEADO) {
-                     printf("  PID %d (Tempo Restante Bloqueio: %d, Prioridade: %d)\n",
-                           p->pid, p->tempo_restante_bloqueio, p->prioridade);
-                }
+    // Imprime Fila de Processos Bloqueados
+    printf("\nFILA DE PROCESSOS BLOQUEADOS:\n");
+    pthread_mutex_lock(&bloqueados_mutex); // Protege o acesso à fila de bloqueados
+    FilaProcessos_t *fila_de_bloqueados = &gerenciador->processos_bloqueados.fila_geral_bloqueados;
+    if (!filaEstaVazia(fila_de_bloqueados)) {
+        printf("  (%d processos bloqueados)\n", fila_de_bloqueados->tamanho);
+        int idx_fila_b = fila_de_bloqueados->inicio_fila;
+        for (int count = 0; count < fila_de_bloqueados->tamanho; count++) {
+            int pid_bloq_fila = fila_de_bloqueados->elementos[idx_fila_b];
+            
+            pthread_mutex_lock(&tabela_processos_mutex); // Bloqueia para ler detalhes do processo
+            if (pid_bloq_fila >= 0 && pid_bloq_fila < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && gerenciador->slot_tabela_ocupado[pid_bloq_fila]) {
+                ProcessoSimulado_t *p_bloq = &gerenciador->tabela_de_processos[pid_bloq_fila];
+                printf("  -> PID %-3d (Prio: %d, Tempo Restante para Desbloqueio: %-3d)\n",
+                       p_bloq->pid, p_bloq->prioridade, p_bloq->tempo_restante_bloqueio);
+            } else {
+                 printf("    -> PID %-3d (INVÁLIDO ou slot não ocupado na tabela de processos)\n", pid_bloq_fila);
             }
-            idx = (idx + 1) % fila_bloqueados->capacidade;
-            count++;
+            pthread_mutex_unlock(&tabela_processos_mutex); // Libera após ler detalhes
+            idx_fila_b = (idx_fila_b + 1) % fila_de_bloqueados->capacidade;
         }
     } else {
-        printf("  Nenhum processo bloqueado\n");
+        printf("  -> Vazia.\n");
     }
-    printf("\n==============================\n");
+    pthread_mutex_unlock(&bloqueados_mutex); // Libera o acesso à fila de bloqueados
+    printf("\n===================================================================================\n\n");
 }
 
-void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
-    printf("\n╔════════════════════════════════╗");
-    printf("\n║      ESTATÍSTICAS FINAIS       ║");
-    printf("\n╚════════════════════════════════╝\n");
+// Imprime as estatísticas finais do sistema (chamada pela thread de impressão).
+void processoImpressaoImprimirEstatisticas(struct GerenciadorDeProcessos_s *gerenciador) {
+    if (!gerenciador) {
+        printf("\nIMPRESSAO ERRO: Ponteiro do gerenciador nulo para imprimir estatísticas.\n");
+        return;
+    }
+    // Cálculo do tempo médio de resposta
+    long tempo_total_resposta_calculado = 0;
+    int num_processos_terminados_calculado = 0;
+    long tempo_simulacao_final = gerenciador->tempo_simulacao_global; // Tempo de término para todos os processos que terminaram até M
     
-    printf("\n┌────────────────────────────────┐");
-    printf("\n│ Tempo Total de Simulação: %-4ld │", impressao->gerenciador->tempo_simulacao_global);
-    printf("\n└────────────────────────────────┘\n");
+    // O impressao_mutex já foi adquirido pela threadFuncaoImpressaoWrapper.
+
+    printf("\n╔═════════════════════════════════════════════════════════════════════════════╗");
+    printf("\n║                       ESTATÍSTICAS FINAIS DA SIMULAÇÃO                      ║");
+    printf("\n╚═════════════════════════════════════════════════════════════════════════════╝\n");
     
-    // Imprime estatísticas de cada processo
+    pthread_mutex_lock(&tabela_processos_mutex); // Protege acesso ao tempo global e à tabela de processos
+    printf("\n┌───────────────────────────────────────────┐");
+    printf("\n│ Tempo Total de Simulação Global: %-10ld │", gerenciador->tempo_simulacao_global);
+    printf("\n└───────────────────────────────────────────┘\n");
+    
+    printf("\n------------------- Estatísticas Individuais dos Processos --------------------\n");
+    int processos_listados_stats = 0;
     for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
-        if (impressao->gerenciador->slot_tabela_ocupado[i]) {
-            ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[i];
-            printf("\n┌───── Processo %d ───────────────┐\n", i);
-            printf("│ Estado Final: %-16d │\n", p->estado_atual);
-            printf("│ Tempo Total de CPU: %-10ld │\n", p->tempo_total_cpu_usado);
-            printf("│ Tempo de Chegada: %-12ld │\n", p->tempo_chegada_sistema);
-            printf("│ Prioridade Final: %-12d │\n", p->prioridade);
-            printf("└────────────────────────────────┘\n");
+        // Para estatísticas, listamos processos que foram marcados como ocupados em algum momento
+        // OU se é o PID 0 (que sempre existe no início) OU se seu estado final é TERMINADO.
+        // A verificação de slot_tabela_ocupado[i] pode não ser suficiente se o slot foi limpo
+        // antes desta impressão. Portanto, verificamos se p->pid == i e alguma atividade.
+        
+        ProcessoSimulado_t *p_stat = &gerenciador->tabela_de_processos[i];
+        // Listar se o PID no slot corresponde ao índice E (foi o processo inicial OU teve tempo de CPU OU terminou)
+        if (p_stat->pid == i && (p_stat->pid == 0 || p_stat->tempo_total_cpu_usado > 0 || p_stat->estado_atual == EST_TERMINADO || gerenciador->slot_tabela_ocupado[i])) {
+            processos_listados_stats++;
+            printf("\n  Processo PID: %d\n", p_stat->pid);
+            printf("    Estado Final Alcançado : %s\n", estadoParaString(p_stat->estado_atual));
+            printf("    PID do Processo Pai    : %d\n", p_stat->pid_pai);
+            printf("    Prioridade Final       : %d\n", p_stat->prioridade);
+            printf("    Tempo de Chegada       : %ld\n", p_stat->tempo_chegada_sistema);
+            printf("    Tempo Total CPU Usado  : %ld unidades de tempo\n", p_stat->tempo_total_cpu_usado);
+            printf("    PC (Contador Programa) Final: %d\n", p_stat->pc);
+            if (p_stat->estado_atual == EST_BLOQUEADO) { // Improvável no final, mas para consistência
+                printf("    Tempo Restante Bloqueio: %d\n", p_stat->tempo_restante_bloqueio);
+            }
+            printf("    ---------------------------------------------------\n");
         }
     }
-    printf("\n==============================\n");
-}
 
-void processoImpressaoFinalizar(ProcessoImpressao_t *impressao) {
-    free(impressao);
+     for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
+        if (gerenciador->slot_tabela_ocupado[i]) {
+            ProcessoSimulado_t *p_stat = &gerenciador->tabela_de_processos[i];
+            if (p_stat->estado_atual == EST_TERMINADO) {
+                // Consideramos o tempo de término como o tempo global da simulação no momento do comando 'M'
+                // ou, se quisermos ser mais precisos, precisaríamos de um campo "tempo_de_termino" no ProcessoSimulado_t
+                // que seria preenchido quando o processo realmente termina.
+                // Para simplificar, e dado que 'M' é o fim, tempo_simulacao_final é uma boa aproximação
+                // se o processo terminou ANTES do comando 'M'.
+                // Se a especificação pede o tempo exato de término, a abordagem anterior (atualizar em psExecutarProcesso) é melhor.
+                // Assumindo que tempo_simulacao_final como tempo de término para processos já terminados é aceitável:
+
+                long tempo_de_resposta_individual = tempo_simulacao_final - p_stat->tempo_chegada_sistema;
+                if (tempo_de_resposta_individual < 0) tempo_de_resposta_individual = 0; // Sanity check
+
+                tempo_total_resposta_calculado += tempo_de_resposta_individual;
+                num_processos_terminados_calculado++;
+            }
+        }
+    }
+
+    // Agora use as variáveis calculadas para a impressão
+    printf("\n\n---------------------- Tempo Médio de Resposta ------------------------\n");
+    if (num_processos_terminados_calculado > 0) {
+        double tempo_medio_resposta = (double)tempo_total_resposta_calculado / num_processos_terminados_calculado;
+        printf("┌───────────────────────────────────────────┐\n");
+        printf("│ Tempo Médio de Resposta: %-17.2f │\n", tempo_medio_resposta);
+        printf("└───────────────────────────────────────────┘\n");
+    } else {
+        printf("┌───────────────────────────────────────────┐\n");
+        printf("│ Nenhum processo terminado para calcular TMR │\n");
+        printf("└───────────────────────────────────────────┘\n");
+    }
+
+    // O unlock de tabela_processos_mutex ocorre após esta seção no seu código original.
+    pthread_mutex_unlock(&tabela_processos_mutex);
+    printf("\n===================================================================================\n\n");
 }
- 
