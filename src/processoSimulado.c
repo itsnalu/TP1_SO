@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <pthread.h> 
 
-// --- Funções de Lista de Instruções (COLE SEU CÓDIGO ORIGINAL FUNCIONAL AQUI) ---
+// --- Funções de Lista de Instruções 
 void psInicializarListaInstrucoes(ListaInstrucoes_t *lista) {
     if (!lista) return;
     lista->primeiro = (ApontadorInstrucao_t)malloc(sizeof(CelulaInstrucao_t));
