@@ -2,9 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Definição do semáforo
-sem_t sem_impressao;
-
 void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
     pid_t pid = fork();
     
@@ -14,26 +11,21 @@ void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_im
     }
     
     if (pid == 0) { // Processo filho
-        // Tenta adquirir o semáforo
-        if (sem_wait(&sem_impressao) == 0) {
-            ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
-            if (!impressao) {
-                sem_post(&sem_impressao);
-                exit(EXIT_FAILURE);
-            }
-
-            impressao->tipo_impressao = tipo_impressao;
-            impressao->gerenciador = gerenciador;
-
-            if (tipo_impressao == 0) {
-                processoImpressaoImprimirEstado(impressao);
-            } else {
-                processoImpressaoImprimirEstatisticas(impressao);
-            }
-
-            processoImpressaoFinalizar(impressao);
-            sem_post(&sem_impressao);
+        ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
+        if (!impressao) {
+            exit(EXIT_FAILURE);
         }
+
+        impressao->tipo_impressao = tipo_impressao;
+        impressao->gerenciador = gerenciador;
+
+        if (tipo_impressao == 0) {
+            processoImpressaoImprimirEstado(impressao);
+        } else {
+            processoImpressaoImprimirEstatisticas(impressao);
+        }
+
+        processoImpressaoFinalizar(impressao);
         exit(0);
     } else { // Processo pai
         if (tipo_impressao == 1) { // Se for comando M, espera o processo de impressão terminar
@@ -41,25 +33,6 @@ void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_im
         }
     }
 }
-
-// void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
-//     ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
-//     if (!impressao) {
-//         perror("Erro ao alocar memória para processo de impressão");
-//         exit(EXIT_FAILURE);
-//     }
-
-//     impressao->tipo_impressao = tipo_impressao;
-//     impressao->gerenciador = gerenciador;
-
-//     if (tipo_impressao == 0) {
-//         processoImpressaoImprimirEstado(impressao);
-//     } else {
-//         processoImpressaoImprimirEstatisticas(impressao);
-//     }
-
-//     processoImpressaoFinalizar(impressao);
-// }
 
 void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
     printf("\n╔════════════════════════════════╗");
@@ -134,8 +107,7 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
     if (!filaEstaVazia(fila_bloqueados)) {
         int idx = fila_bloqueados->inicio_fila;
         int count = 0;
-        // Itera sobre uma cópia dos PIDs ou de forma cuidadosa se a fila puder ser modificada por outro thread
-        // Para a impressão, a iteração simples deve ser segura, pois a fila não é modificada *durante* esta função de impressão.
+
         while (count < fila_bloqueados->tamanho) {
             int pid = fila_bloqueados->elementos[idx];
             if (pid >= 0 && pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA && impressao->gerenciador->slot_tabela_ocupado[pid]) {
@@ -164,6 +136,10 @@ void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
     printf("\n┌────────────────────────────────┐");
     printf("\n│ Tempo Total de Simulação: %-4ld │", impressao->gerenciador->tempo_simulacao_global);
     printf("\n└────────────────────────────────┘\n");
+
+    // Cálculo do tempo médio de resposta
+    long tempo_total_resposta = 0;
+    int num_processos_terminados = 0;
     
     // Imprime estatísticas de cada processo
     for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
@@ -173,10 +149,32 @@ void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
             printf("│ Estado Final: %-16d │\n", p->estado_atual);
             printf("│ Tempo Total de CPU: %-10ld │\n", p->tempo_total_cpu_usado);
             printf("│ Tempo de Chegada: %-12ld │\n", p->tempo_chegada_sistema);
+            
+            // Calcula o tempo de resposta para processos terminados
+            if (p->estado_atual == EST_TERMINADO) {
+                long tempo_resposta = impressao->gerenciador->tempo_simulacao_global - p->tempo_chegada_sistema;
+                tempo_total_resposta += tempo_resposta;
+                num_processos_terminados++;
+                printf("│ Tempo de Resposta: %-11ld │\n", tempo_resposta);
+            }
+            
             printf("│ Prioridade Final: %-12d │\n", p->prioridade);
             printf("└────────────────────────────────┘\n");
         }
     }
+
+    // Imprime o tempo médio de resposta
+    if (num_processos_terminados > 0) {
+        double tempo_medio_resposta = (double)tempo_total_resposta / num_processos_terminados;
+        printf("\n┌────────────────────────────────┐");
+        printf("\n│ Tempo Médio de Resposta: %-3.2f │", tempo_medio_resposta);
+        printf("\n└────────────────────────────────┘\n");
+    } else {
+        printf("\n┌────────────────────────────────┐");
+        printf("\n│ Nenhum processo terminado      │");
+        printf("\n└────────────────────────────────┘\n");
+    }
+    
     printf("\n==============================\n");
 }
 

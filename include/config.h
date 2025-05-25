@@ -7,8 +7,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <pthread.h>
-
 #define MAX_CMD_LEN 100
 
 // Constantes do Simulador

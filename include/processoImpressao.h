@@ -7,13 +7,9 @@
 #include "fila.h"
 #include "cpu.h"
 #include "estados.h"
-#include <semaphore.h>
 
 struct GerenciadorDeProcessos_s;
 typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
-
-// Declaração do semáforo como variável global
-extern sem_t sem_impressao;
 
 typedef struct {
     int pid;                    // Identificador do processo de impressão

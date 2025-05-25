@@ -219,7 +219,7 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
            instr.tipoInstrucaoChar, instr.arg1, instr.arg2);
     
     int pc_foi_alterado_por_salto = 0;
-
+    
     switch (instr.tipoInstrucaoChar) {
         case 'N': // Define o número de variáveis utilizáveis
             p->num_variaveis_declaradas = instr.arg1;
@@ -288,44 +288,44 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
                 }
             }
             printf("[PID %d] Processo bloqueado por %d unidades de tempo\n", p->pid, p->tempo_restante_bloqueio);
-            return;
+            break;
             
         case 'T': // Termina o processo
             p->estado_atual = EST_TERMINADO;
             printf("[PID %d] Processo terminado\n", p->pid);
-            return;
+            break;
             
         case 'F': // Cria um processo filho (fork)
-{
-    // Cria uma estrutura temporária para passar informações do filho para o gerenciador
-    ProcessoSimulado_t *info_filho = psCriarNovo(-1, p->pid, p->prioridade, tempo_global_simulador);
-    
-    // Simula a criação do filho
-    info_filho->pc = p->pc + 1; // Filho começa na próxima instrução
-    
-    // Copia o programa e a memória do pai para as informações do filho
-    psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
-    memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
-    info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
-    
-    // Avança o PC do pai conforme o argumento da instrução F
-    p->pc = (p->pc + 1) + instr.arg1;
-    pc_foi_alterado_por_salto = 1;
-    
-    // Retorna as informações do filho para o gerenciador
-    *novo_processo_filho_ptr = info_filho;
-    
-    printf("[Pai] PID simulado: %d, criou filho simulado (PC inicial: %d)\n", 
-           p->pid, info_filho->pc);
-    return;
-}
+        {
+            // Cria uma estrutura temporária para passar informações do filho para o gerenciador
+            ProcessoSimulado_t *info_filho = psCriarNovo(-1, p->pid, p->prioridade, tempo_global_simulador);
+            
+            // Simula a criação do filho
+            info_filho->pc = p->pc + 1; // Filho começa na próxima instrução
+            
+            // Copia o programa e a memória do pai para as informações do filho
+            psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
+            memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
+            info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
+            
+            // Avança o PC do pai conforme o argumento da instrução F
+            p->pc = (p->pc + 1) + instr.arg1;
+            pc_foi_alterado_por_salto = 1;
+            
+            // Retorna as informações do filho para o gerenciador
+            *novo_processo_filho_ptr = info_filho;
+            
+            printf("[Pai] PID simulado: %d, criou filho simulado (PC inicial: %d)\n", 
+                   p->pid, info_filho->pc);
+            return;
+        }
         case 'R': // Substitui o programa do processo atual
-            {
-                printf("[PID %d] Substituindo programa por %s\n", p->pid, instr.nome_arquivo_R);
-                psCarregarProgramaDeArquivo(p, instr.nome_arquivo_R);
-                return; // PC foi resetado para 0 (ou processo terminou)
-            }
-            break;
+        {
+            printf("[PID %d] Substituindo programa por %s\n", p->pid, instr.nome_arquivo_R);
+            psCarregarProgramaDeArquivo(p, instr.nome_arquivo_R);
+            return; // PC foi resetado para 0 (ou processo terminou)
+        }
+        break;
             
         default: // Instrução desconhecida
             printf("[PID %d] Instrução desconhecida '%c'\n", p->pid, instr.tipoInstrucaoChar);
@@ -334,7 +334,7 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
     }
 
     // Avança o PC se não foi uma instrução de salto e o processo continua em execução
-    if (!pc_foi_alterado_por_salto && p->estado_atual == EST_EXECUCAO) {
+    if (!pc_foi_alterado_por_salto && (p->estado_atual == EST_EXECUCAO || p->estado_atual == EST_BLOQUEADO)) {
         p->pc++;
         printf("[DEBUG] PC incrementado para %d (tamanho lista: %d)\n", 
                p->pc, p->listaInstrucoes.tamanho);
@@ -408,14 +408,12 @@ void* psExecutarProcesso(void* arg){
                 processo->tempo_restante_bloqueio = instrucao.arg1;
                 printf("[PID %d] Processo bloqueado por %d unidades de tempo.\n",
                        processo->pid, instrucao.arg1);
-                pthread_exit(NULL); // Finaliza execução por enquanto
                 break;
 
             case 'T':
                 // Termina o processo
                 processo->estado_atual = EST_TERMINADO;
                 printf("[PID %d] Processo terminou.\n", processo->pid);
-                pthread_exit(NULL);
                 break;
 
             default:
@@ -434,5 +432,4 @@ void* psExecutarProcesso(void* arg){
     processo->estado_atual = EST_TERMINADO;
     printf("[PID %d] Fim da execução do processo.\n", processo->pid);
 
-    pthread_exit(NULL);
 }

@@ -54,9 +54,6 @@ typedef struct ProcessoSimulado_s {
     int tempo_usado_no_quantum_atual; // Tempo de CPU usado na fatia de tempo corrente
 
     int numProcessos; // Número de processos filhos criados por este processo
-
-    pthread_t thread;
-
 } ProcessoSimulado_t;
 
 // --- Funções de Lista de Instruções (uso interno e para 'F') ---
