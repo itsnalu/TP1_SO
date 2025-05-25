@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <string.h>
 
-void processo_controle(int fd_read, ProcessoSimulado_t *processo) {
+void processo_controle(int fd_read) {
     char comando[MAX_CMD_LEN];
     FILE *pipe_in = fdopen(fd_read, "r");
     

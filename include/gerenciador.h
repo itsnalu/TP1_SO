@@ -7,8 +7,9 @@
 #include "estados.h"          // Estruturas EstadoPronto_t, EstadoBloqueado_t
 #include "processoImpressao.h"
 #include "lista.h"
-#include "threads.h"
 #include "fila.h"
+#include "threads.h"
+#include <pthread.h>
 
 // Estrutura que representa o gerenciador de processos
 typedef struct GerenciadorDeProcessos_s {
@@ -38,6 +39,23 @@ typedef struct GerenciadorDeProcessos_s {
     // Comunicação entre threads
     ThreadComunicacao_t comunicacao;
 } GerenciadorDeProcessos_t;
+
+
+// Estrutura para passar argumentos para a thread do processo
+typedef struct {
+    ProcessoSimulado_t* processo;
+    GerenciadorDeProcessos_t* gerenciador;
+} ThreadArgs_t;
+
+// Funções de gerenciamento de threads
+void inicializarThreads(GerenciadorDeProcessos_t* gerenciador);
+void finalizarThreads(GerenciadorDeProcessos_t* gerenciador);
+void* executarProcessoThread(void* arg);
+void* executarImpressaoThread(void* arg);
+
+// Funções de escalonamento com threads
+void escalonarProcessosThreads(GerenciadorDeProcessos_t* gerenciador);
+void executarUnidadeTempo(GerenciadorDeProcessos_t* gerenciador);
 
 // Funções do gerenciador de processos
 //função que cria um novo processo simulado

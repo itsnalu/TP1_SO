@@ -13,7 +13,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-int main(int argc, char *argv[]) {
+int main(void) {
     // Apresentação inicial
     printf("\n===== Simulador de Gerenciamento de Processos =====\n\n");
 
