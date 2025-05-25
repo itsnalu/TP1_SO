@@ -1,18 +1,14 @@
 #ifndef PROCESSO_IMPRESSAO_H
 #define PROCESSO_IMPRESSAO_H
 
-#include "config.h"
-#include "processoSimulado.h"
 #include "gerenciador.h"
-#include "fila.h"
-#include "cpu.h"
-#include "estados.h"
-#include <semaphore.h>
 
 struct GerenciadorDeProcessos_s;
 typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
 
-// Declaração do semáforo como variável global
+//  Este semáforo garante que apenas um processo de impressão
+// execute por vez, evitando condições de corrida na saída
+// do sistema.
 extern sem_t sem_impressao;
 
 typedef struct {

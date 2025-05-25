@@ -115,17 +115,19 @@ void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, ch
 }
 
 //Gerenciar a transição de estados de um processo
-void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, int novoEstado){
-    //Verifica se o PID é válido e se o processo existe
+void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, int novoEstado) {
     if (pid < 0 || pid >= MAX_PROCESSOS_SIMULADOS_NO_SISTEMA || !gerenciador->slot_tabela_ocupado[pid]) {
-        printf("Erro: Processo %d não encontrado.\n", pid);
+        printf("[Gerenciador] Erro: PID %d inválido para transição de estado\n", pid);
         return;
     }
-    //Substitui o programa do processo pelo novo programa
+
     ProcessoSimulado_t *processo = &gerenciador->tabela_de_processos[pid];
-    gerenciador->cpu_sistema.processo_atual = processo;
-    processo->estado_atual = EST_EXECUCAO;
-    printf("Processo %d escalonado para execução.\n", pid);
+    EstadoProcesso_e estado_anterior = processo->estado_atual;
+    
+    // Atualiza o estado do processo
+    processo->estado_atual = novoEstado;
+    
+    printf("[Gerenciador] Processo %d: %d -> %d\n", pid, estado_anterior, novoEstado);
 }
 // Função de escalonamento de processos
 void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador) {
@@ -396,7 +398,7 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
     }
 }
 // Função auxiliar para executar uma unidade de tempo
-static void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
+void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
     printf("[Gerenciador] U → fim de unidade de tempo.\n"); // Mensagem mais concisa
 
     // --- Processar processos bloqueados (despertar) ---

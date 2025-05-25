@@ -55,7 +55,7 @@ typedef struct ProcessoSimulado_s {
 
     int numProcessos; // Número de processos filhos criados por este processo
 
-    pthread_t thread;
+    pthread_t thread; // Thread associada ao processo
 
 } ProcessoSimulado_t;
 
@@ -86,7 +86,5 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
 void psImprimirInstrucoes(const ProcessoSimulado_t *p); // Função para debug
 
 void* psExecutarProcesso(void* arg);
-
-
 
 #endif // PROCESSO_SIMULADO_H

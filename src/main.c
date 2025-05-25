@@ -14,9 +14,6 @@
 #include <sys/wait.h>
 
 int main(int argc, char *argv[]) {
-    // Inicializa o semáforo com valor 1 
-    sem_init(&sem_impressao, 0, 1);
-
     // Apresentação inicial
     printf("\n===== Simulador de Gerenciamento de Processos =====\n\n");
 
@@ -46,11 +43,10 @@ int main(int argc, char *argv[]) {
         printf("Usando arquivo de instruções padrão: %s\n", nomeArquivoInst);
     }
 
-    // Verifica brevemente se o arquivo de instruções é acessível (psCarregarProgramaDeArquivo fará a abertura real)
+    // Verifica brevemente se o arquivo de instruções é acessível
     FILE *teste_arq_inst = fopen(nomeArquivoInst, "r");
     if (!teste_arq_inst) {
         perror("Erro ao tentar acessar arquivo de instruções iniciais");
-        // Fechar descritores do pipe em caso de falha antes do fork
         close(fd[0]);
         close(fd[1]);
         exit(EXIT_FAILURE);
@@ -58,20 +54,17 @@ int main(int argc, char *argv[]) {
     fclose(teste_arq_inst);
 
     // Cria a estrutura para o primeiro processo simulado (PID 0)
-    // psCriarNovo aloca memória para ProcessoSimulado_t
-    ProcessoSimulado_t *processo_inicial = psCriarNovo(0, -1, 0, 0L); // PID 0, Pai -1, Prio 0, Chegada 0
+    ProcessoSimulado_t *processo_inicial = psCriarNovo(0, -1, 0, 0L);
     if (!processo_inicial) {
-        // psCriarNovo já trata erro de malloc, mas uma checagem aqui é boa prática.
         fprintf(stderr, "Erro crítico: Falha ao alocar memória para o processo inicial.\n");
         exit(EXIT_FAILURE);
     }
 
-    // Carrega o programa (lista de instruções) para o processo inicial
-    // psCarregarProgramaDeArquivo aloca memória para as instruções.
+    // Carrega o programa para o processo inicial
     psCarregarProgramaDeArquivo(processo_inicial, nomeArquivoInst);
     if (processo_inicial->listaInstrucoes.tamanho == 0 && processo_inicial->estado_atual == EST_TERMINADO) {
-        fprintf(stderr, "Falha ao carregar instruções do arquivo '%s' para o processo inicial. O arquivo pode estar vazio, ser inválido ou não encontrado.\n", nomeArquivoInst);
-        psLiberarMemoria(processo_inicial); // Libera a memória alocada por psCriarNovo
+        fprintf(stderr, "Falha ao carregar instruções do arquivo '%s' para o processo inicial.\n", nomeArquivoInst);
+        psLiberarMemoria(processo_inicial);
         exit(EXIT_FAILURE);
     }
     printf("Programa inicial '%s' carregado: %d instruções.\n", nomeArquivoInst, processo_inicial->listaInstrucoes.tamanho);
@@ -92,14 +85,14 @@ int main(int argc, char *argv[]) {
         nomeArquivoCmd[strcspn(nomeArquivoCmd, "\n")] = '\0';
 
         if (strlen(nomeArquivoCmd) == 0) {
-            strcpy(nomeArquivoCmd, "comandos.txt"); // Arquivo de comandos padrão
+            strcpy(nomeArquivoCmd, "comandos.txt");
             printf("Usando arquivo de comandos padrão: %s\n", nomeArquivoCmd);
         }
 
         entrada_comandos = fopen(nomeArquivoCmd, "r");
         if (!entrada_comandos) {
             perror("Erro ao abrir arquivo de comandos");
-            psLiberarMemoria(processo_inicial); // Libera processo inicial antes de sair
+            psLiberarMemoria(processo_inicial);
             close(fd[0]);
             close(fd[1]);
             exit(EXIT_FAILURE);
@@ -126,36 +119,23 @@ int main(int argc, char *argv[]) {
 
     if (pid == 0) {
         // PROCESSO FILHO: Gerenciador de Processos
-        // printf("[DEBUG Gerenciador PID %d] Iniciado.\n", getpid());
-        close(fd[1]); // Gerenciador não escreve neste pipe, apenas lê.
-        
-        // O gerenciador assume a responsabilidade pela memória de 'processo_inicial' a partir daqui.
+        close(fd[1]);
         gerenciadorProcessosSimulados(fd[0], processo_inicial);
-        
-        close(fd[0]); // Fecha a extremidade de leitura após o uso.
-        // A liberação da memória de 'processo_inicial' e de outros processos
-        // deve ser feita pelo gerenciador ao final de sua execução ou quando os processos terminam.
-        // Se 'processo_inicial' foi copiado para a tabela interna do gerenciador e a lista de instruções
-        // também foi copiada profundamente, o gerenciador pode liberar sua cópia.
-        // No modelo atual, 'gerenciador.tabela_de_processos[0] = *processo_inicial;' faz uma cópia da estrutura,
-        // mas a lista de instruções (ponteiros) é compartilhada. O gerenciador deve chamar
-        // psLiberarMemoria para os processos em sua tabela.
+        close(fd[0]);
         printf("[Processo Gerenciador PID %d] Finalizado.\n", getpid());
         exit(EXIT_SUCCESS);
     } else {
         // PROCESSO PAI: Controle
-        // printf("[DEBUG Controle PID %d] Iniciado. Gerenciador criado com PID %d.\n", getpid(), pid);
-        close(fd[0]); // Controle não lê deste pipe, apenas escreve.
+        close(fd[0]);
 
         char buffer_comando[MAX_CMD_LEN];
         printf("[Processo Controle] Enviando comandos para o Gerenciador...\n");
 
         while (fgets(buffer_comando, sizeof(buffer_comando), entrada_comandos)) {
-            buffer_comando[strcspn(buffer_comando, "\r\n")] = 0; // Remove newline/CR
+            buffer_comando[strcspn(buffer_comando, "\r\n")] = 0;
 
-            if (strlen(buffer_comando) == 0) continue; // Ignora linhas vazias
+            if (strlen(buffer_comando) == 0) continue;
 
-            // Valida o comando
             if (buffer_comando[0] != 'U' && buffer_comando[0] != 'I' && buffer_comando[0] != 'M') {
                 printf("[Processo Controle] Comando inválido ignorado: '%s'\n", buffer_comando);
                 continue;
@@ -165,7 +145,6 @@ int main(int argc, char *argv[]) {
             char comando_com_newline[MAX_CMD_LEN + 2]; // +1 para newline, +1 para null terminator
             snprintf(comando_com_newline, sizeof(comando_com_newline), "%s\n", buffer_comando);
             
-            // printf("[Processo Controle] Enviando: %s", comando_com_newline); // Debug
             if (write(fd[1], comando_com_newline, strlen(comando_com_newline)) < 0) {
                 perror("[Processo Controle] Erro ao escrever no pipe");
                 break; 
@@ -186,16 +165,10 @@ int main(int argc, char *argv[]) {
         }
 
         printf("[Processo Controle] Aguardando o Processo Gerenciador (PID %d) finalizar...\n", pid);
-        wait(NULL); // Espera o processo gerenciador (filho) terminar.
+        wait(NULL);
         
-        // O processo pai (Controle) NÃO deve liberar 'processo_inicial' aqui,
-        // pois o ponteiro foi passado para o filho (Gerenciador), que se torna
-        // responsável por gerenciar e liberar essa memória.
-        // psLiberarMemoria(processo_inicial); // NÃO FAZER AQUI!
-
         printf("\n===== Simulação Concluída. Processo Controle Encerrado. =====\n");
     }
 
-    sem_destroy(&sem_impressao);
     return 0;
 }

@@ -39,11 +39,13 @@ void cpuSalvarContexto(CPU_t *cpu){
 }
 // Restaura o contexto de um processo para a CPU.
 void cpuRestaurarContexto(CPU_t *cpu, ProcessoSimulado_t *processo){
-    if(cpu->processo_atual == NULL){
+    if(processo == NULL){
         fprintf(stderr,"Erro:Tentativa de restaurar contexto com processo nulo\n");
         return;
     }
-    cpu->tempo_executado_neste_quantum++; // Incrementa o tempo executado neste quantum
+    cpu->processo_atual = processo;
+    cpu->pc_registrador_cpu = processo->pc;
+    cpu->tempo_executado_neste_quantum = processo->tempo_usado_no_quantum_atual;
 }
 // Incrementa o tempo executado no quantum atual.
 void cpuIncrementarTempoExecutado(CPU_t *cpu){

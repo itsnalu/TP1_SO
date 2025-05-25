@@ -7,9 +7,11 @@
 #include "estados.h"          // Estruturas EstadoPronto_t, EstadoBloqueado_t
 #include "processoImpressao.h"
 #include "lista.h"
+#include "threads.h"
+#include "fila.h"
 
 // Estrutura que representa o gerenciador de processos
-struct GerenciadorDeProcessos_s {
+typedef struct GerenciadorDeProcessos_s {
     long tempo_simulacao_global; // Contador global de unidades de tempo da simulação
 
     CPU_t cpu_sistema; // A unidade de CPU simulada
@@ -27,9 +29,15 @@ struct GerenciadorDeProcessos_s {
     // Campos para cálculo de estatísticas
     long acumulador_tempo_de_vida_processos_concluidos;
     int total_processos_concluidos;
-};
 
-typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
+    pthread_mutex_t mutex_cpu;        // Mutex para acesso à CPU
+    pthread_mutex_t mutex_fila_prontos; // Mutex para fila de prontos
+    pthread_mutex_t mutex_fila_bloqueados; // Mutex para fila de bloqueados
+    sem_t sem_impressao;             // Semáforo para controle de impressão
+
+    // Comunicação entre threads
+    ThreadComunicacao_t comunicacao;
+} GerenciadorDeProcessos_t;
 
 // Funções do gerenciador de processos
 //função que cria um novo processo simulado

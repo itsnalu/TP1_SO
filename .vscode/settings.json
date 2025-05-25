@@ -6,7 +6,8 @@
     "processos.h": "c",
     "gerenciador.h": "c",
     "estados.h": "c",
-    "fila.h": "c"
+    "fila.h": "c",
+    "semaphore.h": "c"
   },
   "makefile.configureOnOpen": false,
   "C_Cpp_Runner.cCompilerPath": "gcc",
