@@ -1,42 +1,46 @@
+# Compilador C
 CC = gcc
-CFLAGS = -Wall -Iinclude
-LDFLAGS = -lm # Adicionado para linkar a biblioteca matemática, se necessário
 
-# Arquivos fonte (verifique se processoControle.c é realmente necessário ou se lista.c deve ser incluído)
-# Assumindo que lista.c é necessário e processoControle.c não é diretamente usado pelo main
-SRCS = src/main.c src/processoSimulado.c src/processos.c src/fila.c src/cpu.c src/estados.c src/gerenciador.c src/processoImpressao.c src/lista.c
+# Opções de compilação:
+# -Wall: Habilita a maioria dos avisos comuns
+# -Iinclude: Diz ao compilador para procurar por arquivos de cabeçalho no diretório 'include'
+# -pthread: Habilita o suporte a POSIX threads na compilação e linkagem
+# -g: Adiciona símbolos de debug
+CFLAGS = -Wall -g -Iinclude -pthread
 
-# Nomes dos executáveis
-TARGET_PRIORITY = programa
-TARGET_FIFO = programa_fifo
+# Opções de linkagem:
+# -lm: Linka com a biblioteca matemática (se usada)
+# -pthread: Linka com a biblioteca POSIX threads
+LDFLAGS = -lm -pthread
 
-# Alvo padrão: compila a versão com prioridade
-all: $(TARGET_PRIORITY)
+# Lista de todos os arquivos fonte .c que compõem o seu projeto
+SRCS = src/main.c \
+       src/gerenciador.c \
+       src/processoSimulado.c \
+       src/processoImpressao.c \
+       src/estados.c \
+       src/fila.c \
+       src/cpu.c
 
-# Alvo para compilar a versão com prioridade
-priority: $(TARGET_PRIORITY)
+# Nome do executável final
+TARGET = simulador_so_threads
 
-# Alvo para compilar a versão com FIFO
-fifo: $(TARGET_FIFO)
+# Alvo padrão: compila o programa principal
+all: $(TARGET)
 
-# Regra para criar o executável de prioridade
-$(TARGET_PRIORITY): $(SRCS)
+# Regra para criar o executável principal
+$(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Simulador '$(TARGET)' compilado com sucesso."
 
-# Regra para criar o executável FIFO
-$(TARGET_FIFO): $(SRCS)
-	$(CC) $(CFLAGS) -DUSE_FIFO $^ -o $@ $(LDFLAGS)
-
-# Limpeza
+# Alvo para limpar arquivos compilados (objetos e o executável)
 clean:
-	rm -f $(TARGET_PRIORITY) $(TARGET_FIFO) *.o src/*.o
+	rm -f $(TARGET) src/*.o *.o
+	@echo "Arquivos compilados removidos."
 
-# Executar a versão de prioridade (compila se necessário)
-run: $(TARGET_PRIORITY)
-	./$(TARGET_PRIORITY)
+# Alvo para executar o programa (compila se necessário)
+run: $(TARGET)
+	./$(TARGET)
 
-# Executar a versão FIFO (compila se necessário)
-run_fifo: $(TARGET_FIFO)
-	./$(TARGET_FIFO)
-
-.PHONY: all clean priority fifo run run_fifo
+# Declara que 'all', 'clean', e 'run' não são nomes de arquivos
+.PHONY: all clean run

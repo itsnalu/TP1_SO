@@ -2,49 +2,35 @@
 #define GERENCIADOR_H
 
 #include "config.h"
-#include "processoSimulado.h" // Seu módulo ProcessoSimulado_t
-#include "cpu.h"              // Estrutura CPU_t
-#include "estados.h"          // Estruturas EstadoPronto_t, EstadoBloqueado_t
-#include "processoImpressao.h"
-#include "lista.h"
+#include "processoSimulado.h" // Para ProcessoSimulado_t e ThreadArgs_t
+#include "estados.h"          // Para EstadoPronto_t, EstadoBloqueado_t
+// A CPU_Simulada_t foi simplificada e pode ser apenas um int para processo_ativo_pid
+// Se precisar de cpu.h, inclua-o, mas a tendência foi simplificar.
 
 // Estrutura que representa o gerenciador de processos
-struct GerenciadorDeProcessos_s {
-    long tempo_simulacao_global; // Contador global de unidades de tempo da simulação
+typedef struct GerenciadorDeProcessos_s {
+    long tempo_simulacao_global; // Contador global de unidades de tempo
 
-    CPU_t cpu_sistema; // A unidade de CPU simulada
-
-    // Tabela principal de todos os processos existentes no sistema.
+    // Tabela de Processos: armazena os PCBs simulados
     ProcessoSimulado_t tabela_de_processos[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA];
-    // Controle de quais slots da tabela_de_processos estão em uso.
-    char slot_tabela_ocupado[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA];
-    int proximo_pid_a_ser_alocado; // Contador para gerar PIDs únicos
-    Lista* tabela_processos;
+    char slot_tabela_ocupado[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA]; // 1 se ocupado, 0 se livre
 
-    EstadoPronto_t processos_prontos;       // Estrutura para gerenciar processos prontos
-    EstadoBloqueado_t processos_bloqueados; // Estrutura para gerenciar processos bloqueados
+    // Filas de Estados
+    EstadoPronto_t processos_prontos;       // Agora com múltiplas filas de prioridade
+    EstadoBloqueado_t processos_bloqueados; // Fila única para processos bloqueados
 
-    // Campos para cálculo de estatísticas
-    long acumulador_tempo_de_vida_processos_concluidos;
-    int total_processos_concluidos;
-};
+    // Controle da CPU Simulada
+    int processo_ativo_pid; // PID do processo cuja thread está conceitualmente "na CPU"
+                            // -1 se a CPU estiver ociosa.
+} GerenciadorDeProcessos_t;
 
-typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
 
-// Funções do gerenciador de processos
-//função que cria um novo processo simulado
-void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArquivo);
-//função que substitui imagem atual de um processo para uma nova
-void substituirImagemProcesso(GerenciadorDeProcessos_t *gerenciador, int pid, char *novaImagem);   
-//função que gerencia estados de processos 
-void gerenciarTransicoesEstados(GerenciadorDeProcessos_t *gerenciador, int pid, int novoEstado);
-//função de escalonamento
-void escalonarProcessos(GerenciadorDeProcessos_t *gerenciador);
-//função de troca de contexto
-void trocarContexto(GerenciadorDeProcessos_t *gerenciador);
-//função principal do gerenciador de processos simulados
-void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_inicial);
-// Atribui um PID a um processo simulado
-void atribuirPidAoProcesso(GerenciadorDeProcessos_t *gerenciador, ProcessoSimulado_t *processo);
+// --- Funções do Gerenciador ---
+void gerenciadorProcessosSimulados(int fd_read_pipe, ProcessoSimulado_t *info_processo_inicial_main);
+int configurarNovoProcessoNaTabela(GerenciadorDeProcessos_t *gerenciador,
+                                     ProcessoSimulado_t *info_novo_processo,
+                                     int pid_pai,
+                                     int prioridade_inicial_sugerida,
+                                     long tempo_chegada);
 
 #endif // GERENCIADOR_H

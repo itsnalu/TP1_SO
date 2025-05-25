@@ -1,99 +1,176 @@
 #include "estados.h"
-#include "fila.h"
-#include "config.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include "config.h"  // Para NUM_NIVEIS_PRIORIDADE e declarações extern dos mutexes
+#include <stdio.h>   // Para fprintf em caso de erro
+#include <pthread.h> // Para mutexes (já incluído via config.h, mas explícito para clareza)
 
-//inicializar as filas de processos prontos, uma para cada nivel de prioridade
-void estadosInicializarProntos(EstadoPronto_t *ep){
-    for(int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++){
-        filaInicializar(&ep->filas_por_prioridade[i]);
+void estadosInicializarProntos(EstadoPronto_t *ep) {
+    if (!ep) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de inicializar EstadoPronto_t nulo.\n");
+        return;
     }
-    // Inicializa também a fila específica para FIFO
-    filaInicializar(&ep->fila_fifo);
-    printf("[DEBUG] Fila FIFO inicializada.\n"); // DEBUG
-}
-//inicializar as filas de processos bloqueados
-void estadosInicializarBloqueados(EstadoBloqueado_t *eb){
-    filaInicializar(&eb->fila_geral_bloqueados);
-}
-//Liberar memoria alocada para as filas de processos prontos
-void estadosLiberarProntos(EstadoPronto_t *ep){
-    for(int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++){
-        filaLiberarMemoria(&ep->filas_por_prioridade[i]);
+    for (int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++) {
+        filaInicializar(&ep->filas_prontos[i]);
     }
+    // printf("DEBUG ESTADOS: Filas de prontos (MLFQ) inicializadas.\n");
 }
-//Liberar memoria alocada para as filas de processos bloqueados
-void estadosLiberarBloqueados(EstadoBloqueado_t *eb){
-    filaLiberarMemoria(&eb->fila_geral_bloqueados);
+
+void estadosLiberarProntos(EstadoPronto_t *ep) {
+    if (!ep) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de liberar EstadoPronto_t nulo.\n");
+        return;
+    }
+    for (int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++) {
+        filaLiberarMemoria(&ep->filas_prontos[i]);
+    }
+    // printf("DEBUG ESTADOS: Memória das filas de prontos (MLFQ) liberada.\n");
 }
-//Adicionar um processo a fila de prontos
+
+// Adiciona pid à fila de prontos do nível de prioridade especificado.
 void estadosAdicionarPronto(EstadoPronto_t *ep, int pid, int prioridade) {
-    // Verifica se a prioridade é válida
-    // Prioridade deve estar entre 0 e NUM_NIVEIS_PRIORIDADE - 1
-    // Se prioridade for negativa ou maior ou igual a NUM_NIVEIS_PRIORIDADE, imprime mensagem de erro
-    if(prioridade < 0 || prioridade >= NUM_NIVEIS_PRIORIDADE){
-        fprintf(stderr, "Prioridade invalida: %d\n", prioridade);
+    if (!ep) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de adicionar PID %d a EstadoPronto_t nulo.\n", pid);
         return;
     }
 
-    // Verifica se o processo já está na fila
-    FilaProcessos_t *fila = &ep->filas_por_prioridade[prioridade];
-    int idx = fila->inicio_fila;
-    for (int i = 0; i < fila->tamanho; i++) {
-        if (fila->elementos[idx] == pid) {
-            printf("[DEBUG] Processo %d já está na fila de prontos (Prioridade: %d)\n", pid, prioridade);
-            return;
-        }
-        idx = (idx + 1) % fila->capacidade;
+    if (prioridade < 0 || prioridade >= NUM_NIVEIS_PRIORIDADE) {
+        fprintf(stderr, "ESTADOS AVISO: PID %d com prioridade inválida %d. Ajustando para prioridade %d (mais baixa).\n", 
+                pid, prioridade, NUM_NIVEIS_PRIORIDADE - 1);
+        prioridade = NUM_NIVEIS_PRIORIDADE - 1; // Fallback para a fila de menor prioridade
     }
 
-    // Adiciona o processo à fila de prontos correspondente à prioridade
-    filaEnfileirar(&ep->filas_por_prioridade[prioridade], pid);
-    printf("[DEBUG] Processo %d adicionado à fila de prontos (Prioridade: %d)\n", pid, prioridade);
+    pthread_mutex_lock(&prontos_mutex);
+    
+    // Verificar se já está na fila de destino para evitar duplicatas exatas na MESMA fila.
+    FilaProcessos_t *fila_destino = &ep->filas_prontos[prioridade];
+    int encontrado_na_mesma_fila = 0;
+    if (fila_destino->tamanho > 0) {
+        int idx = fila_destino->inicio_fila;
+        for (int i = 0; i < fila_destino->tamanho; i++) {
+            if (fila_destino->elementos[idx] == pid) {
+                encontrado_na_mesma_fila = 1;
+                break;
+            }
+            idx = (idx + 1) % fila_destino->capacidade;
+        }
+    }
+
+    if (!encontrado_na_mesma_fila) {
+        filaEnfileirar(&ep->filas_prontos[prioridade], pid);
+        // printf("DEBUG ESTADOS: PID %d adicionado à fila de prontos (Prio %d).\n", pid, prioridade);
+    } else {
+        // printf("DEBUG ESTADOS: PID %d já presente na fila de prontos (Prio %d).\n", pid, prioridade);
+    }
+    
+    pthread_mutex_unlock(&prontos_mutex);
 }
-//Remover um processo da fila de prontos
+
+// Remove e retorna o PID do processo da fila de maior prioridade não vazia.
+// Retorna -1 se todas as filas de prontos estiverem vazias.
 int estadosRemoverPronto(EstadoPronto_t *ep) {
-    for (int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++) {
-        if (!filaEstaVazia(&ep->filas_por_prioridade[i])) {
-            return filaDesenfileirar(&ep->filas_por_prioridade[i]);
+    if (!ep) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de remover de EstadoPronto_t nulo.\n");
+        return -1;
+    }
+
+    pthread_mutex_lock(&prontos_mutex);
+    int pid_removido = -1;
+    for (int i = 0; i < NUM_NIVEIS_PRIORIDADE; i++) { // Itera da maior prioridade (0) para a menor
+        if (!filaEstaVazia(&ep->filas_prontos[i])) {
+            pid_removido = filaDesenfileirar(&ep->filas_prontos[i]);
+            // printf("DEBUG ESTADOS: PID %d removido da fila de prontos (Prio %d).\n", pid_removido, i);
+            break; // Encontrou e removeu, sai do loop
         }
     }
-    return -1; // Nenhum processo pronto disponível
+    pthread_mutex_unlock(&prontos_mutex);
+    return pid_removido;
 }
-// Função para adicionar processo à fila FIFO
-void estadosAdicionarProntoFIFO(EstadoPronto_t *ep, int pid){
-    FilaProcessos_t *fila = &ep->fila_fifo;
-// Verifica se o processo já está na fila FIFO
-    int idx = fila->inicio_fila;
-    int i;
-    for(i = 0; i < fila->tamanho; i++){
-        if(fila->elementos[idx] == pid){
-            printf("[DEBUG] Processo %d já está na fila FIFO\n", pid);
-            return;
+
+
+// --- Funções para Estado BLOQUEADO (fila única) ---
+
+void estadosInicializarBloqueados(EstadoBloqueado_t *eb) {
+    if (!eb) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de inicializar EstadoBloqueado_t nulo.\n");
+        return;
+    }
+    filaInicializar(&eb->fila_geral_bloqueados);
+    // printf("DEBUG ESTADOS: Fila de bloqueados inicializada.\n");
+}
+
+void estadosLiberarBloqueados(EstadoBloqueado_t *eb) {
+    if (!eb) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de liberar EstadoBloqueado_t nulo.\n");
+        return;
+    }
+    filaLiberarMemoria(&eb->fila_geral_bloqueados);
+    // printf("DEBUG ESTADOS: Memória da fila de bloqueados liberada.\n");
+}
+
+// Adiciona um processo à fila de bloqueados (thread-safe)
+void estadosAdicionarBloqueado(EstadoBloqueado_t *eb, int pid) {
+    if (!eb) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de adicionar PID %d a EstadoBloqueado_t nulo.\n", pid);
+        return;
+    }
+    pthread_mutex_lock(&bloqueados_mutex);
+    
+    // Opcional: Verificar se o PID já existe na fila para evitar duplicatas.
+    FilaProcessos_t *fila = &eb->fila_geral_bloqueados;
+    int encontrado = 0;
+    if(fila->tamanho > 0) {
+        int idx = fila->inicio_fila;
+        for (int i = 0; i < fila->tamanho; i++) {
+            if (fila->elementos[idx] == pid) {
+                encontrado = 1;
+                break;
+            }
+            idx = (idx + 1) % fila->capacidade;
         }
-        idx = (idx + 1) % fila->capacidade;
     }
-    // Adiciona processo na fila FIFO
-    filaEnfileirar(fila, pid);
-    printf("[DEBUG] Processo %d adicionado à fila FIFO\n", pid);
-}
-// Remove o próximo processo da fila FIFO
-int estadosRemoverProntoFIFO(EstadoPronto_t *ep) {
-    if (filaEstaVazia(&ep->fila_fifo)) {
-        return -1; // Fila vazia
+
+    if (!encontrado) {
+        filaEnfileirar(&eb->fila_geral_bloqueados, pid);
+        // printf("DEBUG ESTADOS: PID %d adicionado à fila de bloqueados.\n", pid);
+    } else {
+        // printf("DEBUG ESTADOS: PID %d já presente na fila de bloqueados.\n", pid);
     }
-    return filaDesenfileirar(&ep->fila_fifo);
+    
+    pthread_mutex_unlock(&bloqueados_mutex);
 }
-//Adicionar um processo a fila de bloqueados
-void estadosAdicionarBloqueado(EstadoBloqueado_t *eb, int pid){
-    // Adiciona o processo à fila de bloqueados
-    filaEnfileirar(&eb->fila_geral_bloqueados, pid);
-}
-//Remover um processo da fila de bloqueados
-int estadosRemoverBloqueado(EstadoBloqueado_t *eb) {
-    if (filaEstaVazia(&eb->fila_geral_bloqueados)) {
-        return -1; // Nenhum processo bloqueado disponível
+
+// Remove um PID específico da fila de bloqueados (thread-safe).
+// Retorna 1 se removido, 0 se não encontrado ou se a fila estava vazia.
+int estadosRemoverBloqueadoEspecifico(EstadoBloqueado_t *eb, int pid_a_remover) {
+    if (!eb) {
+        fprintf(stderr, "ESTADOS ERRO: Tentativa de remover PID %d de EstadoBloqueado_t nulo.\n", pid_a_remover);
+        return 0;
     }
-    return filaDesenfileirar(&eb->fila_geral_bloqueados);
+
+    pthread_mutex_lock(&bloqueados_mutex);
+    FilaProcessos_t *fila_original = &eb->fila_geral_bloqueados;
+    int removido = 0;
+
+    if (filaEstaVazia(fila_original)) {
+        pthread_mutex_unlock(&bloqueados_mutex);
+        return 0; // Nada a remover
+    }
+
+    FilaProcessos_t fila_temporaria;
+    filaInicializar(&fila_temporaria); 
+
+    // Transfere elementos para a fila temporária, exceto o que deve ser removido
+    while (!filaEstaVazia(fila_original)) {
+        int pid_atual = filaDesenfileirar(fila_original);
+        if (pid_atual == pid_a_remover) {
+            removido = 1;
+        } else {
+            filaEnfileirar(&fila_temporaria, pid_atual);
+        }
+    }
+    
+    filaLiberarMemoria(fila_original); 
+    *fila_original = fila_temporaria;  // Atribui a nova fila (com seus elementos e metadados)
+    
+    pthread_mutex_unlock(&bloqueados_mutex);
+    return removido;
 }

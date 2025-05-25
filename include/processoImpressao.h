@@ -1,36 +1,21 @@
 #ifndef PROCESSO_IMPRESSAO_H
 #define PROCESSO_IMPRESSAO_H
 
-#include "config.h"
-#include "processoSimulado.h"
-#include "gerenciador.h"
-#include "fila.h"
-#include "cpu.h"
-#include "estados.h"
-#include <semaphore.h>
+#include "config.h" // Para declaração extern de impressao_mutex e NUM_NIVEIS_PRIORIDADE
+#include <pthread.h> // Para pthread_t (já incluído por config.h)
 
+// Forward declaration para evitar dependência circular se gerenciador.h incluísse este.
+// (GerenciadorDeProcessos_t é definido em gerenciador.h)
 struct GerenciadorDeProcessos_s;
-typedef struct GerenciadorDeProcessos_s GerenciadorDeProcessos_t;
 
-// Declaração do semáforo como variável global
-extern sem_t sem_impressao;
-
+// Estrutura para passar argumentos para a thread de impressão
 typedef struct {
-    int pid;                    // Identificador do processo de impressão
-    GerenciadorDeProcessos_t *gerenciador; // Ponteiro para o gerenciador
-    int tipo_impressao; // 0 = normal, 1 = final
-} ProcessoImpressao_t;
+    struct GerenciadorDeProcessos_s *gerenciador; // Ponteiro para o gerenciador de processos principal
+    int tipo_impressao;                   // 0 para estado atual, 1 para estatísticas finais
+} ImpressaoArgs_t;
 
-// Inicia o processo de impressão
-void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao);
+void processoImpressaoIniciar(struct GerenciadorDeProcessos_s *gerenciador, int tipo_impressao);
+void processoImpressaoImprimirEstado(struct GerenciadorDeProcessos_s *gerenciador_ptr);
+void processoImpressaoImprimirEstatisticas(struct GerenciadorDeProcessos_s *gerenciador_ptr);
 
-// Imprime o estado atual do sistema
-void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao);
-
-// Imprime as estatísticas do sistema
-void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao);
-
-// Finaliza o processo de impressão
-void processoImpressaoFinalizar(ProcessoImpressao_t *impressao);
-
-#endif // PROCESSO_IMPRESSAO_H 
+#endif // PROCESSO_IMPRESSAO_H
