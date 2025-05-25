@@ -1,65 +1,50 @@
 #include "../include/processoImpressao.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-// Definição do semáforo
-sem_t sem_impressao;
+#include <pthread.h>
+#include <time.h>
 
 void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
-    pid_t pid = fork();
-    
-    if (pid < 0) {
-        perror("Erro ao criar processo de impressão");
+    // Cria uma nova thread para impressão
+    pthread_t thread_impressao;
+    ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
+    if (!impressao) {
+        perror("Erro ao alocar memória para processo de impressão");
         return;
     }
-    
-    if (pid == 0) { // Processo filho
-        // Tenta adquirir o semáforo
-        if (sem_wait(&sem_impressao) == 0) {
-            ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
-            if (!impressao) {
-                sem_post(&sem_impressao);
-                exit(EXIT_FAILURE);
-            }
 
-            impressao->tipo_impressao = tipo_impressao;
-            impressao->gerenciador = gerenciador;
+    impressao->tipo_impressao = tipo_impressao;
+    impressao->gerenciador = gerenciador;
 
-            if (tipo_impressao == 0) {
-                processoImpressaoImprimirEstado(impressao);
-            } else {
-                processoImpressaoImprimirEstatisticas(impressao);
-            }
+    // Tenta adquirir o semáforo com timeout
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5; // 5 segundos de timeout
 
-            processoImpressaoFinalizar(impressao);
-            sem_post(&sem_impressao);
+    if (sem_timedwait(&gerenciador->sem_impressao, &timeout) == 0) {
+        if (pthread_create(&thread_impressao, NULL, executarImpressaoThread, impressao) != 0) {
+            perror("Erro ao criar thread de impressão");
+            sem_post(&gerenciador->sem_impressao);
+            free(impressao);
+            return;
         }
-        exit(0);
-    } else { // Processo pai
-        if (tipo_impressao == 1) { // Se for comando M, espera o processo de impressão terminar
-            waitpid(pid, NULL, 0);
+
+        // Se for comando M, espera a thread terminar
+        if (tipo_impressao == 1) {
+            if (pthread_join(thread_impressao, NULL) != 0) {
+                perror("Erro ao aguardar thread de impressão");
+            }
+        } else {
+            // Para comando I, detacha a thread para não precisar fazer join depois
+            if (pthread_detach(thread_impressao) != 0) {
+                perror("Erro ao detachar thread de impressão");
+            }
         }
+    } else {
+        printf("Timeout ao tentar adquirir semáforo de impressão\n");
+        free(impressao);
     }
 }
-
-// void processoImpressaoIniciar(GerenciadorDeProcessos_t *gerenciador, int tipo_impressao) {
-//     ProcessoImpressao_t *impressao = (ProcessoImpressao_t *)malloc(sizeof(ProcessoImpressao_t));
-//     if (!impressao) {
-//         perror("Erro ao alocar memória para processo de impressão");
-//         exit(EXIT_FAILURE);
-//     }
-
-//     impressao->tipo_impressao = tipo_impressao;
-//     impressao->gerenciador = gerenciador;
-
-//     if (tipo_impressao == 0) {
-//         processoImpressaoImprimirEstado(impressao);
-//     } else {
-//         processoImpressaoImprimirEstatisticas(impressao);
-//     }
-
-//     processoImpressaoFinalizar(impressao);
-// }
 
 void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
     printf("\n╔════════════════════════════════╗");

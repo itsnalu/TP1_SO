@@ -549,6 +549,10 @@ static void imprimirEstatisticasFinais(GerenciadorDeProcessos_t *gerenciador) {
         processoImpressaoImprimirEstatisticas(impressao);
         free(impressao);
     }
+    
+    // Finaliza todas as threads antes de encerrar
+    finalizarThreads(gerenciador);
+    
     printf("=== Simulador encerrado com sucesso ===\n");
 }
 
