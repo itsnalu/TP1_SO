@@ -150,22 +150,53 @@ void processoImpressaoImprimirEstatisticas(ProcessoImpressao_t *impressao) {
     printf("\n│ Tempo Total de Simulação: %-4ld │", impressao->gerenciador->tempo_simulacao_global);
     printf("\n└────────────────────────────────┘\n");
     
-    // Imprime estatísticas de cada processo
+    long tempo_total_resposta_calculado_agora = 0;
+    int num_processos_terminados_agora = 0;
+    long tempo_termino_considerado = impressao->gerenciador->tempo_simulacao_global;
+
+    // Imprime estatísticas de cada processo e calcula tempo de resposta para os terminados
     for (int i = 0; i < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; i++) {
         if (impressao->gerenciador->slot_tabela_ocupado[i]) {
             ProcessoSimulado_t *p = &impressao->gerenciador->tabela_de_processos[i];
-            printf("\n┌───── Processo %d ───────────────┐\n", i);
-            printf("│ Estado Final: %-16d │\n", p->estado_atual);
+            printf("\n┌───── Processo %d ───────────────┐\n", p->pid);
+            printf("│ Estado Final: %-16d │\n", p->estado_atual); // Idealmente, imprimir o nome do estado
             printf("│ Tempo Total de CPU: %-10ld │\n", p->tempo_total_cpu_usado);
             printf("│ Tempo de Chegada: %-12ld │\n", p->tempo_chegada_sistema);
             printf("│ Prioridade Final: %-12d │\n", p->prioridade);
             printf("└────────────────────────────────┘\n");
+
+            if (p->estado_atual == EST_TERMINADO) {
+                // Se o processo terminou, calcula seu tempo de resposta
+                // Assumimos que o tempo de término é o tempo_simulacao_global atual,
+                // o que é uma aproximação se os processos terminaram em UTEs diferentes.
+                // Para ser preciso, o tempo de término individual deveria ser registrado.
+                if (p->tempo_chegada_sistema <= tempo_termino_considerado) { // Sanity check
+                    long tempo_de_resposta_individual = tempo_termino_considerado - p->tempo_chegada_sistema;
+                    tempo_total_resposta_calculado_agora += tempo_de_resposta_individual;
+                    num_processos_terminados_agora++;
+                }
+            }
         }
     }
+
+    // Imprimir o tempo médio de resposta calculado
+    if (num_processos_terminados_agora > 0) {
+        double tempo_medio_resposta = (double)tempo_total_resposta_calculado_agora / num_processos_terminados_agora;
+        printf("\n┌────────────────────────────────┐");
+        printf("\n│ Tempo Médio de Resposta: %-3.2f │", tempo_medio_resposta); // Ajuste a formatação se necessário
+        printf("\n└────────────────────────────────┘\n");
+    } else {
+        printf("\n┌────────────────────────────────┐");
+        printf("\n│ Nenhum processo terminado      │");
+        printf("\n└────────────────────────────────┘\n");
+    }
+    // Fim da adição
+
     printf("\n==============================\n");
 }
 
 void processoImpressaoFinalizar(ProcessoImpressao_t *impressao) {
-    free(impressao);
+    if (impressao) {
+        free(impressao);
+    }
 }
- 
