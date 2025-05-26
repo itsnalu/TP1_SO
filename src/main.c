@@ -118,12 +118,12 @@ int main(void) {
     }
 
     if (pid == 0) {
-        // PROCESSO FILHO: Gerenciador de Processos
-        close(fd[1]);
-        gerenciadorProcessosSimulados(fd[0], processo_inicial);
-        close(fd[0]);
-        printf("[Processo Gerenciador PID %d] Finalizado.\n", getpid());
-        exit(EXIT_SUCCESS);
+    // PROCESSO FILHO: Gerenciador de Processos
+    close(fd[1]); // Fecha a extremidade de escrita do pipe
+    gerenciadorProcessosSimulados(fd[0], processo_inicial); // Passa o ponteiro
+    close(fd[0]);
+    printf("[Processo Gerenciador PID %d] Finalizado.\n", getpid());
+    exit(EXIT_SUCCESS);
     } else {
         // PROCESSO PAI: Controle
         close(fd[0]);

@@ -1,42 +1,37 @@
 CC = gcc
-CFLAGS = -Wall -Iinclude
-LDFLAGS = -lm # Adicionado para linkar a biblioteca matemática, se necessário
+# Se quiser compilação condicional, use uma flag como -DUSE_THREADS
+# CFLAGS = -Wall -Iinclude # Sem -pthread aqui por padrão
+CFLAGS = -Wall -Iinclude -pthread # Adiciona -pthread para compilar com suporte a threads
 
-# Arquivos fonte (verifique se processoControle.c é realmente necessário ou se lista.c deve ser incluído)
-# Assumindo que lista.c é necessário e processoControle.c não é diretamente usado pelo main
+LDFLAGS = -lm -pthread # Adiciona -pthread para linkar com a biblioteca pthread
+
 SRCS = src/main.c src/processoSimulado.c src/processos.c src/fila.c src/cpu.c src/estados.c src/gerenciador.c src/processoImpressao.c src/lista.c src/threads.c 
 
-# Nomes dos executáveis
 TARGET_PRIORITY = programa
 TARGET_FIFO = programa_fifo
+# Adicione um novo alvo para a versão com threads, se desejar manter separado
+# TARGET_THREADED = programa_threaded
 
-# Alvo padrão: compila a versão com prioridade
-all: $(TARGET_PRIORITY)
+all: $(TARGET_PRIORITY) # Adicione $(TARGET_FIFO) $(TARGET_THREADED) se tiver alvos separados
 
-# Alvo para compilar a versão com prioridade
 priority: $(TARGET_PRIORITY)
 
-# Alvo para compilar a versão com FIFO
 fifo: $(TARGET_FIFO)
 
-# Regra para criar o executável de prioridade
+# Regra para criar o executável de prioridade (agora com -pthread)
 $(TARGET_PRIORITY): $(SRCS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-# Regra para criar o executável FIFO
+# Regra para criar o executável FIFO (agora com -pthread)
 $(TARGET_FIFO): $(SRCS)
 	$(CC) $(CFLAGS) -DUSE_FIFO $^ -o $@ $(LDFLAGS)
 
-# Limpeza
+# Exemplo de alvo para uma versão explicitamente com threads (se usar -DUSE_THREADS)
+# $(TARGET_THREADED): $(SRCS)
+#	$(CC) $(CFLAGS) -DUSE_THREADS $^ -o $@ $(LDFLAGS)
+
 clean:
-	rm -f $(TARGET_PRIORITY) $(TARGET_FIFO) *.o src/*.o
+	rm -f $(TARGET_PRIORITY) $(TARGET_FIFO) *.o src/*.o # Adicione $(TARGET_THREADED)
 
-# Executar a versão de prioridade (compila se necessário)
-run: $(TARGET_PRIORITY)
-	./$(TARGET_PRIORITY)
-
-# Executar a versão FIFO (compila se necessário)
-run_fifo: $(TARGET_FIFO)
-	./$(TARGET_FIFO)
-
-.PHONY: all clean priority fifo run run_fifo
+# ...
+.PHONY: all clean priority fifo # Adicione threaded run_threaded

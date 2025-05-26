@@ -2,7 +2,7 @@
 #define PROCESSO_SIMULADO_H
 
 #include "config.h"
-
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +55,10 @@ typedef struct ProcessoSimulado_s {
 
     int numProcessos; // Número de processos filhos criados por este processo
 
-    pthread_t thread; // Thread associada ao processo
+    pthread_t thread_id;        // ID da thread no sistema
+    pthread_mutex_t proc_mutex; // Mutex para o estado e condição deste processo
+    pthread_cond_t proc_cond;   // Variável de condição para este processo esperar
+    int is_scheduled_to_run;  // Flag: 1 se o Gerenciador o escalonou, 0 caso contrário
 
 } ProcessoSimulado_t;
 

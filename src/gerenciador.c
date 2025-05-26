@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 
 //função para criar um novo processo
 void criarProcessoSimulado(GerenciadorDeProcessos_t *gerenciador, char *nomeArquivo){
@@ -347,13 +348,17 @@ void escalonarProcessosThreads(GerenciadorDeProcessos_t *gerenciador){
            gerenciador->cpu_sistema.quantum_total_alocado);
 
     // Cria a thread para executar o processo simulado
-    int resultado_thread = pthread_create(&proximo_processo->thread, NULL, psExecutarProcesso, (void*)proximo_processo);
+    int resultado_thread = pthread_create(&proximo_processo->thread_id, NULL, psExecutarProcesso, (void*)proximo_processo);
     if (resultado_thread != 0) {
         fprintf(stderr, "[Erro] Falha ao criar thread para o processo %d\n", proximo_processo->pid);
         proximo_processo->estado_atual = EST_TERMINADO;
         gerenciador->cpu_sistema.processo_atual = NULL;
         return;
     }
+}
+//Função de escalonamento com FIFO usando THREADS
+void escalonarProcessosFIFOThreads(GerenciadorDeProcessos_t *gerenciador){
+
 }
 // Função para realizar a troca de contexto entre processos
 void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
@@ -397,135 +402,185 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador){
         novo_processo->tempo_chegada_sistema = gerenciador->tempo_simulacao_global;
     }
 }
+
+int get_quantum_for_priority(int priority) {
+    switch (priority) {
+        case 0: return QUANTUM_PRIORIDADE_0;
+        case 1: return QUANTUM_PRIORIDADE_1;
+        case 2: return QUANTUM_PRIORIDADE_2;
+        case 3: return QUANTUM_PRIORIDADE_3;
+        default: return QUANTUM_PADRAO; // Ou um valor padrão de config.h
+    }
+}
 // Função auxiliar para executar uma unidade de tempo
 void executarUnidadeTempo(GerenciadorDeProcessos_t *gerenciador) {
-    printf("[Gerenciador] U → fim de unidade de tempo.\n"); // Mensagem mais concisa
+    pthread_mutex_lock(&gerenciador->mutex_geral_gerenciador);
+    printf("\n[Gerenciador UTE %ld] << INICIO UNIDADE DE TEMPO >>\n", gerenciador->tempo_simulacao_global);
 
-    // --- Processar processos bloqueados (despertar) ---
-    int pids_bloqueados_para_checar[MAX_PROCESSOS_SIMULADOS_NO_SISTEMA];
-    int num_pids_bloqueados = 0;
-    FilaProcessos_t *fila_bloqueados_original = &gerenciador->processos_bloqueados.fila_geral_bloqueados;
+    // 1. Processar processos bloqueados (despertar)
+    // (Adapte sua lógica existente para ser segura com mutex_fila_bloqueados e mutex_fila_prontos)
+    FilaProcessos_t *fila_bloq = &gerenciador->processos_bloqueados.fila_geral_bloqueados;
+    int n_bloqueados = fila_bloq->tamanho;
+    for (int k = 0; k < n_bloqueados; ++k) {
+        int pid_bloqueado = filaDesenfileirar(fila_bloq); // Remove da frente
+        if (pid_bloqueado == -1) break; // Fila ficou vazia
 
-    // Coleta PIDs da fila de bloqueados para processamento seguro
-    int idx_temp_bloqueado = fila_bloqueados_original->inicio_fila;
-    for (int i = 0; i < fila_bloqueados_original->tamanho; i++) {
-        pids_bloqueados_para_checar[num_pids_bloqueados++] = fila_bloqueados_original->elementos[idx_temp_bloqueado];
-        idx_temp_bloqueado = (idx_temp_bloqueado + 1) % fila_bloqueados_original->capacidade;
-    }
-
-    FilaProcessos_t nova_fila_bloqueados; // Fila temporária para os que continuam bloqueados
-    filaInicializar(&nova_fila_bloqueados);
-
-    for (int i = 0; i < num_pids_bloqueados; i++) {
-        int pid_bloqueado = pids_bloqueados_para_checar[i];
-        // Validação do PID antes de acessar a tabela
         if (pid_bloqueado < 0 || pid_bloqueado >= MAX_PROCESSOS_SIMULADOS_NO_SISTEMA || !gerenciador->slot_tabela_ocupado[pid_bloqueado]) {
-            printf("[Gerenciador] AVISO: PID %d inválido encontrado na lista de checagem de bloqueados.\n", pid_bloqueado);
             continue;
         }
-        ProcessoSimulado_t *processo_bloqueado = &gerenciador->tabela_de_processos[pid_bloqueado];
+        ProcessoSimulado_t *proc_b = &gerenciador->tabela_de_processos[pid_bloqueado];
 
-        if (processo_bloqueado->estado_atual == EST_BLOQUEADO) { // Checa se ainda está de fato bloqueado
-            if (processo_bloqueado->tempo_restante_bloqueio > 0) {
-                processo_bloqueado->tempo_restante_bloqueio--;
-            }
-
-            if (processo_bloqueado->tempo_restante_bloqueio == 0) {
-                printf("[Gerenciador] PID %d desbloqueado. Movendo para pronto.\n", pid_bloqueado);
-                processo_bloqueado->estado_atual = EST_PRONTO;
+        pthread_mutex_lock(&proc_b->proc_mutex); // Trava o processo específico
+        if (proc_b->estado_atual == EST_BLOQUEADO) {
+            proc_b->tempo_restante_bloqueio--;
+            if (proc_b->tempo_restante_bloqueio <= 0) {
+                printf("[Gerenciador UTE %ld] Processo PID %d desbloqueado.\n", gerenciador->tempo_simulacao_global, proc_b->pid);
+                proc_b->estado_atual = EST_PRONTO;
+                proc_b->tempo_usado_no_quantum_atual = 0;
+                // Lógica de aumento de prioridade se bloqueou antes de estourar quantum
+                // Esta lógica está em psExecutarProximaInstrucao para 'B', ou pode ser reforçada aqui.
+                // Se a instrução 'B' já aumentou a prioridade, apenas adicione à fila de prontos.
                 #ifdef USE_FIFO
-                    estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, pid_bloqueado);
+                    estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, proc_b->pid);
                 #else
-                    // A prioridade pode ter sido aumentada quando ele bloqueou
-                    estadosAdicionarPronto(&gerenciador->processos_prontos, pid_bloqueado, processo_bloqueado->prioridade);
+                    estadosAdicionarPronto(&gerenciador->processos_prontos, proc_b->pid, proc_b->prioridade);
                 #endif
             } else {
-                // Se ainda estiver bloqueado (tempo_restante > 0), adiciona à nova fila de bloqueados
-                filaEnfileirar(&nova_fila_bloqueados, pid_bloqueado);
+                filaEnfileirar(fila_bloq, pid_bloqueado); // Ainda bloqueado, volta para o fim da fila de bloqueados
+            }
+        } else { // Não deveria estar na fila de bloqueados se não está EST_BLOQUEADO
+             filaEnfileirar(fila_bloq, pid_bloqueado); // Adiciona de volta por segurança, mas investigue
+        }
+        pthread_mutex_unlock(&proc_b->proc_mutex);
+    }
+
+    // 2. Lidar com o processo que estava na CPU (se houver)
+    ProcessoSimulado_t *processo_anterior_cpu = gerenciador->cpu_sistema.processo_atual;
+    if (processo_anterior_cpu != NULL) {
+        pthread_mutex_lock(&processo_anterior_cpu->proc_mutex);
+        // Se a thread do processo sinalizou que terminou sua instrução e ainda está "em execução"
+        // (ou seja, não se bloqueou/terminou sozinha), agora o Gerenciador decide o que fazer.
+        if (processo_anterior_cpu->estado_atual == EST_EXECUCAO) { // <--- PONTO CRÍTICO AQUI
+            processo_anterior_cpu->estado_atual = EST_PRONTO; // Volta para pronto
+            printf("[Gerenciador UTE %ld] PID %d (anterior CPU) volta para PRONTO.\n", gerenciador->tempo_simulacao_global, processo_anterior_cpu->pid);
+
+            #ifndef USE_FIFO
+                // Lógica de quantum e rebaixamento de prioridade
+                int quantum_alocado = get_quantum_for_priority(processo_anterior_cpu->prioridade);
+                if (processo_anterior_cpu->tempo_usado_no_quantum_atual >= quantum_alocado) {
+                    processo_anterior_cpu->tempo_usado_no_quantum_atual = 0;
+                }
+            #endif
+            #ifdef USE_FIFO
+            estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, processo_anterior_cpu->pid);
+            #else
+            estadosAdicionarPronto(&gerenciador->processos_prontos, processo_anterior_cpu->pid, processo_anterior_cpu->prioridade);
+            #endif
+        }
+        // Se ele se bloqueou ou terminou, sua thread já mudou o estado e o Gerenciador não precisa fazer nada aqui.
+        pthread_mutex_unlock(&processo_anterior_cpu->proc_mutex);
+        gerenciador->cpu_sistema.processo_atual = NULL; // CPU está livre
+    }
+
+    // 3. Selecionar próximo processo da fila de prontos
+    int pid_proximo = -1;
+    #ifdef USE_FIFO
+        pid_proximo = estadosRemoverProntoFIFO(&gerenciador->processos_prontos);
+    #else
+        pid_proximo = estadosRemoverPronto(&gerenciador->processos_prontos);
+    #endif
+
+    gerenciador->cpu_sistema.processo_atual = NULL; // Default: CPU ociosa
+
+    if (pid_proximo != -1 && gerenciador->slot_tabela_ocupado[pid_proximo]) {
+        ProcessoSimulado_t *proc_para_rodar = &gerenciador->tabela_de_processos[pid_proximo];
+
+        pthread_mutex_lock(&proc_para_rodar->proc_mutex);
+        if (proc_para_rodar->estado_atual == EST_PRONTO) {
+            proc_para_rodar->estado_atual = EST_EXECUCAO;
+            gerenciador->cpu_sistema.processo_atual = proc_para_rodar;
+            gerenciador->cpu_sistema.indice_processo_na_tabela = proc_para_rodar->pid;
+            proc_para_rodar->tempo_total_cpu_usado++; // Incrementa tempo de CPU usado pelo processo
+
+            #ifndef USE_FIFO
+                // Cada "U" conta como uma unidade para o quantum atual.
+                // Se for um novo processo ou um que estourou quantum, tempo_usado_no_quantum_atual é 0.
+                gerenciador->cpu_sistema.tempo_executado_neste_quantum = proc_para_rodar->tempo_usado_no_quantum_atual;
+                gerenciador->cpu_sistema.quantum_total_alocado = get_quantum_for_priority(proc_para_rodar->prioridade);
+            #else
+                gerenciador->cpu_sistema.tempo_executado_neste_quantum = 0;
+                gerenciador->cpu_sistema.quantum_total_alocado = 0; // FIFO não tem quantum preemptivo
+            #endif
+
+            proc_para_rodar->is_scheduled_to_run = 1;
+            printf("[Gerenciador UTE %ld] PID %d (Thread %lu) escalonado para EXECUCAO. Quantum: %d (Usado neste turno: %d)\n",
+                   gerenciador->tempo_simulacao_global, proc_para_rodar->pid, (unsigned long)proc_para_rodar->thread_id,
+                   gerenciador->cpu_sistema.quantum_total_alocado, proc_para_rodar->tempo_usado_no_quantum_atual);
+            pthread_cond_signal(&proc_para_rodar->proc_cond); // Acorda a thread do processo
+        } else {
+            if (proc_para_rodar->estado_atual != EST_TERMINADO) {
+                #ifdef USE_FIFO
+                    estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, pid_proximo);
+                #else
+                    estadosAdicionarPronto(&gerenciador->processos_prontos, pid_proximo, proc_para_rodar->prioridade);
+                #endif
             }
         }
-        // Se o estado não for EST_BLOQUEADO, ele não é adicionado de volta à nova_fila_bloqueados.
-    }
-    // Libera a fila de bloqueados antiga e substitui pela nova (que contém os ainda bloqueados)
-    filaLiberarMemoria(fila_bloqueados_original);
-    gerenciador->processos_bloqueados.fila_geral_bloqueados = nova_fila_bloqueados;
-#ifdef USE_FIFO
-    escalonarProcessosFIFO(gerenciador);
-#else
-    escalonarProcessos(gerenciador); // Esta função foi ajustada para o rebaixamento correto
-#endif
+        pthread_mutex_unlock(&proc_para_rodar->proc_mutex);
 
-    // --- Executar próxima instrução do processo atual na CPU ---
-    if (gerenciador->cpu_sistema.processo_atual) {
-        ProcessoSimulado_t *novo_filho = NULL;
-        ProcessoSimulado_t *processo_atual_na_cpu = gerenciador->cpu_sistema.processo_atual;
+        // Se um processo foi despachado, esperar a sua thread sinalizar de volta
+        if (gerenciador->cpu_sistema.processo_atual) {
+            pthread_mutex_lock(&gerenciador->comunicacao_gerenciador_processos.mutex);
+            // printf("[Gerenciador UTE %ld] Aguardando PID %d (Thread) completar fatia...\n", gerenciador->tempo_simulacao_global, gerenciador->cpu_sistema.processo_atual->pid);
+            struct timespec timeout;
+            clock_gettime(CLOCK_REALTIME, &timeout);
+            timeout.tv_sec += 2; // Timeout de 2 segundos
 
-        // Só executa se o processo na CPU estiver de fato em estado de execução
-        if (processo_atual_na_cpu->estado_atual == EST_EXECUCAO) {
-            // Incrementa o tempo de CPU usado PELO PROCESSO e o tempo NA CPU NESTE QUANTUM
-            processo_atual_na_cpu->tempo_total_cpu_usado++;
-            gerenciador->cpu_sistema.tempo_executado_neste_quantum++; // Este é usado pelo escalonador por prioridade
-
-            printf("[DEBUG Gerenciador] Executando instrução para PID %d (PC=%d)\n",
-                    processo_atual_na_cpu->pid, processo_atual_na_cpu->pc);
-
-            psExecutarProximaInstrucao(processo_atual_na_cpu,
-                                    gerenciador->tempo_simulacao_global,
-                                    &novo_filho);
-
-            // Se um novo processo filho foi criado
-            if (novo_filho) {
-                atribuirPidAoProcesso(gerenciador, novo_filho); // Define novo_filho->pid e marca slot
-                ProcessoSimulado_t *processo_filho_na_tabela = &gerenciador->tabela_de_processos[novo_filho->pid];
-
-                // Copia dados do processo temporário 'novo_filho' para a tabela de processos
-                processo_filho_na_tabela->pid = novo_filho->pid;
-                processo_filho_na_tabela->pid_pai = novo_filho->pid_pai;
-                processo_filho_na_tabela->estado_atual = novo_filho->estado_atual;
-                processo_filho_na_tabela->prioridade = novo_filho->prioridade;
-                processo_filho_na_tabela->pc = novo_filho->pc;
-                memcpy(processo_filho_na_tabela->memoria, novo_filho->memoria, sizeof(processo_filho_na_tabela->memoria));
-                processo_filho_na_tabela->num_variaveis_declaradas = novo_filho->num_variaveis_declaradas;
-                processo_filho_na_tabela->tempo_chegada_sistema = novo_filho->tempo_chegada_sistema;
-                processo_filho_na_tabela->tempo_total_cpu_usado = 0;
-                processo_filho_na_tabela->tempo_restante_bloqueio = 0;
-                processo_filho_na_tabela->tempo_usado_no_quantum_atual = 0;
-
-                psInicializarListaInstrucoes(&processo_filho_na_tabela->listaInstrucoes);
-                psCopiarListaInstrucoes(&processo_filho_na_tabela->listaInstrucoes, &novo_filho->listaInstrucoes);
-
-                #ifdef USE_FIFO
-                    estadosAdicionarProntoFIFO(&gerenciador->processos_prontos, processo_filho_na_tabela->pid);
-                #else
-                    estadosAdicionarPronto(&gerenciador->processos_prontos, processo_filho_na_tabela->pid, processo_filho_na_tabela->prioridade);
-                #endif
-                printf("[Gerenciador] Novo processo filho %d adicionado.\n", processo_filho_na_tabela->pid);
-
-                psLiberarMemoria(novo_filho); // Libera a estrutura temporária 'novo_filho'
+            int wait_ret = 0;
+            // Loop para tratar spurious wakeups e verificar a condição real
+            while(gerenciador->comunicacao_gerenciador_processos.comando_recebido == 0 && wait_ret != ETIMEDOUT) {
+                wait_ret = pthread_cond_timedwait(&gerenciador->comunicacao_gerenciador_processos.cond,
+                                                &gerenciador->comunicacao_gerenciador_processos.mutex,
+                                                &timeout);
             }
 
-            // Tratar se o processo_atual_na_cpu terminou ou bloqueou APÓS a execução da instrução
-            if (processo_atual_na_cpu->estado_atual == EST_TERMINADO) {
-                printf("[Gerenciador] Processo PID %d terminou.\n", processo_atual_na_cpu->pid);
-                // Recursos (como lista de instruções) são liberados no comando 'M' ou quando o slot é reutilizado.
-            } else if (processo_atual_na_cpu->estado_atual == EST_BLOQUEADO) {
-                printf("[Gerenciador] Processo PID %d bloqueou (tempo para despertar: %d).\n",
-                       processo_atual_na_cpu->pid, processo_atual_na_cpu->tempo_restante_bloqueio);
-                // Adiciona à fila de bloqueados para ser gerenciado pela lógica de despertar
-                estadosAdicionarBloqueado(&gerenciador->processos_bloqueados, processo_atual_na_cpu->pid);
+            if (wait_ret == ETIMEDOUT) {
+                printf("[Gerenciador UTE %ld] TIMEOUT esperando PID %d! Processo pode estar travado.\n", gerenciador->tempo_simulacao_global, gerenciador->cpu_sistema.processo_atual ? gerenciador->cpu_sistema.processo_atual->pid : -1);
+            } else {
+                // printf("[Gerenciador UTE %ld] PID %d (Thread) sinalizou conclusão.\n", gerenciador->tempo_simulacao_global, gerenciador->comunicacao_gerenciador_processos.comando_recebido -1);
             }
-        } else {
-            printf("[Gerenciador] AVISO: Processo %d na CPU não está em estado de EXECUCAO (estado: %d). Não executará instrução.\n",
-                    processo_atual_na_cpu->pid, processo_atual_na_cpu->estado_atual);
+            gerenciador->comunicacao_gerenciador_processos.comando_recebido = 0; // Resetar sinal
+            pthread_mutex_unlock(&gerenciador->comunicacao_gerenciador_processos.mutex);
+
+            // Após a thread do processo rodar, verificar seu estado e atualizar o quantum usado
+            ProcessoSimulado_t *proc_que_rodou = gerenciador->cpu_sistema.processo_atual;
+            if (proc_que_rodou) { // Se ainda está marcado como na CPU
+                pthread_mutex_lock(&proc_que_rodou->proc_mutex);
+                if (proc_que_rodou->estado_atual == EST_EXECUCAO) { // Thread completou instrução, mas não bloqueou/terminou
+                    proc_que_rodou->tempo_usado_no_quantum_atual++;
+                    printf("[Gerenciador UTE %ld] PID %d completou instrução, permanece em EXECUCAO (será PRONTO no prox UTE).\n", gerenciador->tempo_simulacao_global, proc_que_rodou->pid);
+                } else if (proc_que_rodou->estado_atual == EST_BLOQUEADO) {
+                    printf("[Gerenciador UTE %ld] PID %d auto-bloqueou.\n", gerenciador->tempo_simulacao_global, proc_que_rodou->pid);
+                    proc_que_rodou->tempo_usado_no_quantum_atual = 0;
+                    gerenciador->cpu_sistema.processo_atual = NULL; 
+                    // Não precisa adicionar à fila de bloqueados aqui, a thread ou psExecutar já fez
+                } else if (proc_que_rodou->estado_atual == EST_TERMINADO) {
+                    printf("[Gerenciador UTE %ld] PID %d auto-terminou.\n", gerenciador->tempo_simulacao_global, proc_que_rodou->pid);
+                    gerenciador->cpu_sistema.processo_atual = NULL;
+                }
+                pthread_mutex_unlock(&proc_que_rodou->proc_mutex);
+            }
         }
     } else {
-        // Ninguém na CPU após o escalonamento (fila de prontos estava vazia)
-        printf("[Gerenciador] CPU Ociosa nesta unidade de tempo.\n");
+        printf("[Gerenciador UTE %ld] CPU Ociosa (nenhum processo pronto).\n", gerenciador->tempo_simulacao_global);
+        gerenciador->cpu_sistema.processo_atual = NULL;
     }
 
-    // Incrementa o tempo global da simulação
     gerenciador->tempo_simulacao_global++;
+    printf("[Gerenciador UTE %ld] << FIM UNIDADE DE TEMPO >>\n\n", gerenciador->tempo_simulacao_global -1);
+    pthread_mutex_unlock(&gerenciador->mutex_geral_gerenciador);
 }
+
 
 // Função auxiliar para imprimir estado atual
 static void imprimirEstadoAtual(GerenciadorDeProcessos_t *gerenciador) {
@@ -571,15 +626,57 @@ void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_ini
     memset(&gerenciador, 0, sizeof(GerenciadorDeProcessos_t));
 
     // Inicializa a CPU
+    inicializarThreads(&gerenciador);
     cpuInicializar(&gerenciador.cpu_sistema);
-
-    // Inicializa os estados
     estadosInicializarProntos(&gerenciador.processos_prontos);
     estadosInicializarBloqueados(&gerenciador.processos_bloqueados);
 
     // Copia o processo inicial para a tabela do gerenciador
     gerenciador.tabela_de_processos[0] = *processo_inicial;
+    ProcessoSimulado_t* processo_inicial_na_tabela = &gerenciador.tabela_de_processos[0];
     gerenciador.slot_tabela_ocupado[0] = 1;
+
+    ThreadArgs_t *args_init = (ThreadArgs_t*)malloc(sizeof(ThreadArgs_t));
+        if (!args_init) {
+            perror("Falha ao alocar memória para args_init");
+            // Limpeza antes de sair
+            fclose(pipe_in); // fd_read foi aberto como pipe_in
+            // Libera estruturas do gerenciador que foram inicializadas
+            estadosLiberarProntos(&gerenciador.processos_prontos);
+            estadosLiberarBloqueados(&gerenciador.processos_bloqueados);
+            // Destruir mutexes e semáforos inicializados em inicializarThreads
+            pthread_mutex_destroy(&gerenciador.mutex_geral_gerenciador);
+            pthread_mutex_destroy(&gerenciador.mutex_fila_prontos); // Se inicializado em inicializarThreads
+            pthread_mutex_destroy(&gerenciador.mutex_fila_bloqueados); // Se inicializado em inicializarThreads
+            sem_destroy(&gerenciador.sem_impressao); // Se inicializado em inicializarThreads
+            pthread_mutex_destroy(&gerenciador.comunicacao_gerenciador_processos.mutex);
+            pthread_cond_destroy(&gerenciador.comunicacao_gerenciador_processos.cond);
+            exit(EXIT_FAILURE);
+        }
+        args_init->processo = processo_inicial_na_tabela;
+        args_init->gerenciador = &gerenciador;
+
+        if (pthread_create(&processo_inicial_na_tabela->thread_id, NULL, executarProcessoThread, args_init) != 0) {
+            perror("Falha ao criar thread para processo inicial");
+            free(args_init); // Libera args_init, pois a thread não foi criada com sucesso
+
+            // Limpeza mais completa antes de sair
+            fclose(pipe_in);
+            estadosLiberarProntos(&gerenciador.processos_prontos);
+            estadosLiberarBloqueados(&gerenciador.processos_bloqueados);
+            
+            pthread_mutex_destroy(&gerenciador.mutex_geral_gerenciador);
+            pthread_mutex_destroy(&gerenciador.mutex_fila_prontos);
+            pthread_mutex_destroy(&gerenciador.mutex_fila_bloqueados);
+            sem_destroy(&gerenciador.sem_impressao);
+            pthread_mutex_destroy(&gerenciador.comunicacao_gerenciador_processos.mutex);
+            pthread_cond_destroy(&gerenciador.comunicacao_gerenciador_processos.cond);
+            
+            pthread_mutex_destroy(&processo_inicial_na_tabela->proc_mutex);
+            pthread_cond_destroy(&processo_inicial_na_tabela->proc_cond);
+
+            exit(EXIT_FAILURE);
+        }
 
     // Adiciona o processo inicial à fila de prontos
 #ifdef USE_FIFO
@@ -632,20 +729,18 @@ void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_ini
 }
 
 void atribuirPidAoProcesso(GerenciadorDeProcessos_t *gerenciador, ProcessoSimulado_t *processo) {
-    // Procura o primeiro slot livre na tabela de processos
-    int pid = 0;
+    int pid = 0; // Começa a busca do PID 0
     for (pid = 0; pid < MAX_PROCESSOS_SIMULADOS_NO_SISTEMA; pid++) {
         if (!gerenciador->slot_tabela_ocupado[pid]) {
             break;
         }
     }
     if (pid == MAX_PROCESSOS_SIMULADOS_NO_SISTEMA) {
-        printf("Limite de processos atingido.\n");
+        printf("[Gerenciador] ERRO: Limite de processos (%d) atingido. Não é possível criar novo processo.\n", MAX_PROCESSOS_SIMULADOS_NO_SISTEMA);
+        processo->pid = -1; // Indicar falha
         return;
     }
-    // Atribui o PID ao processo
-    processo->pid = pid;
-    // Marca o slot como ocupado
-    gerenciador->slot_tabela_ocupado[pid] = 1;
-    printf("[DEBUG] PID %d atribuído ao processo\n", pid);
+    processo->pid = pid; // Atribui o PID encontrado ao processo
+    gerenciador->slot_tabela_ocupado[pid] = 1; // Marca o slot como ocupado
+    printf("[Gerenciador] PID %d atribuído ao novo processo.\n", pid);
 }

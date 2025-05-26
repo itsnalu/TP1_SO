@@ -119,6 +119,11 @@ ProcessoSimulado_t* psCriarNovo(int pid_sugerido, int pid_pai, int prioridade_in
     p->tempo_total_cpu_usado = 0;
     p->tempo_restante_bloqueio = 0;
     p->tempo_usado_no_quantum_atual = 0;
+
+    pthread_mutex_init(&p->proc_mutex, NULL);
+    pthread_cond_init(&p->proc_cond, NULL);
+    p->is_scheduled_to_run = 0;
+    p->thread_id = 0;
     return p;
 }
 
@@ -177,6 +182,9 @@ void psCarregarProgramaDeArquivo(ProcessoSimulado_t *p, const char* nome_arquivo
 void psLiberarMemoria(ProcessoSimulado_t *p) {
     if (!p) return;
     psLiberarListaInstrucoes(&p->listaInstrucoes);
+
+    pthread_mutex_destroy(&p->proc_mutex);
+    pthread_cond_destroy(&p->proc_cond);
     free(p);
 }
 
@@ -185,7 +193,8 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
     printf("[DEBUG] Estado atual: %d\n", p->estado_atual);
     printf("[DEBUG] PC atual: %d\n", p->pc);
     printf("[DEBUG] Total de instruções: %d\n", p->listaInstrucoes.tamanho);
-    
+    *novo_processo_filho_ptr = NULL;
+
     // Checagens iniciais de validade
     if (!p || novo_processo_filho_ptr == NULL) {
         printf("[DEBUG] Erro: Processo nulo ou ponteiro inválido\n");
@@ -194,32 +203,29 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
     }
     *novo_processo_filho_ptr = NULL;
 
-    // Processo só executa se estiver no estado de execução
-    if (p->estado_atual != EST_EXECUCAO) {
-        printf("[DEBUG] Processo não está em execução (estado: %d)\n", p->estado_atual);
+        if (p->estado_atual != EST_EXECUCAO) {
+        printf("[PID %d] Erro: Tentativa de executar instrução sem estar em EST_EXECUCAO. Estado: %d\n", p->pid, p->estado_atual);
         return;
     }
 
-    // Verifica se o PC está dentro dos limites do programa
     if (p->pc < 0 || p->pc >= p->listaInstrucoes.tamanho) {
-        printf("[DEBUG] PC fora dos limites (PC: %d, Tamanho: %d)\n", p->pc, p->listaInstrucoes.tamanho);
-        p->estado_atual = EST_TERMINADO;
+        printf("[PID %d] ERRO: PC (%d) fora dos limites! Terminando processo.\n", p->pid, p->pc);
+        p->estado_atual = EST_TERMINADO; // PC inválido termina o processo
         return;
     }
 
-    Instrucao_t *instr_atual_ptr = psObterInstrucaoNoPc(p);
+    Instrucao_t *instr_atual_ptr = psObterInstrucaoNoPc(p); // Sua função para obter a instrução
     if (!instr_atual_ptr) {
-        printf("[DEBUG] Erro ao obter instrução no PC %d\n", p->pc);
+        printf("[PID %d] ERRO: Falha ao obter instrução no PC (%d). Terminando processo.\n", p->pid, p->pc);
         p->estado_atual = EST_TERMINADO;
         return;
     }
 
     Instrucao_t instr = *instr_atual_ptr;
+    int proximo_pc_candidato = p->pc + 1; // PC padrão para a próxima instrução
     printf("[DEBUG] Executando instrução: %c %d %d\n", 
            instr.tipoInstrucaoChar, instr.arg1, instr.arg2);
     
-    int pc_foi_alterado_por_salto = 0;
-
     switch (instr.tipoInstrucaoChar) {
         case 'N': // Define o número de variáveis utilizáveis
             p->num_variaveis_declaradas = instr.arg1;
@@ -279,65 +285,62 @@ void psExecutarProximaInstrucao(ProcessoSimulado_t *p, long tempo_global_simulad
         case 'B': // Bloqueia o processo
             p->estado_atual = EST_BLOQUEADO;
             p->tempo_restante_bloqueio = (instr.arg1 > 0) ? instr.arg1 : 1;
-            // Aumenta a prioridade se o processo foi bloqueado antes de consumir seu quantum
-            if (p->tempo_usado_no_quantum_atual < instr.arg1) {
-                if (p->prioridade > 0) {
-                    p->prioridade--;
-                    printf("[PID %d] Prioridade aumentada para %d por bloqueio antecipado\n", 
-                           p->pid, p->prioridade);
-                }
-            }
-            printf("[PID %d] Processo bloqueado por %d unidades de tempo\n", p->pid, p->tempo_restante_bloqueio);
-            return;
+            printf("[PID %d] Processo bloqueado por %d unidades de tempo (PC irá para %d).\n", p->pid, p->tempo_restante_bloqueio, proximo_pc_candidato);
+            p->pc = proximo_pc_candidato; // Salva o próximo PC ANTES de retornar
+            return; 
             
         case 'T': // Termina o processo
             p->estado_atual = EST_TERMINADO;
-            printf("[PID %d] Processo terminado\n", p->pid);
+            printf("[PID %d] Processo terminado (PC seria %d).\n", p->pid, proximo_pc_candidato);
+            p->pc = proximo_pc_candidato; // Salva o próximo PC (conceitual) ANTES de retornar
             return;
             
         case 'F': // Cria um processo filho (fork)
 {
     // Cria uma estrutura temporária para passar informações do filho para o gerenciador
-    ProcessoSimulado_t *info_filho = psCriarNovo(-1, p->pid, p->prioridade, tempo_global_simulador);
-    
-    // Simula a criação do filho
-    info_filho->pc = p->pc + 1; // Filho começa na próxima instrução
-    
-    // Copia o programa e a memória do pai para as informações do filho
-    psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
-    memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
-    info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
-    
-    // Avança o PC do pai conforme o argumento da instrução F
-    p->pc = (p->pc + 1) + instr.arg1;
-    pc_foi_alterado_por_salto = 1;
-    
-    // Retorna as informações do filho para o gerenciador
-    *novo_processo_filho_ptr = info_filho;
-    
-    printf("[Pai] PID simulado: %d, criou filho simulado (PC inicial: %d)\n", 
-           p->pid, info_filho->pc);
-    return;
+                ProcessoSimulado_t *info_filho = psCriarNovo(-1, p->pid, p->prioridade, tempo_global_simulador);
+                if (!info_filho) {
+                    printf("[PID %d] ERRO: Falha ao alocar memória para processo filho.\n", p->pid);
+                    p->pc = proximo_pc_candidato; // Pai continua na próxima instrução
+                    return;
+                }
+                // Copia estado do pai para o filho
+                psCopiarListaInstrucoes(&info_filho->listaInstrucoes, &p->listaInstrucoes);
+                memcpy(info_filho->memoria, p->memoria, sizeof(p->memoria));
+                info_filho->num_variaveis_declaradas = p->num_variaveis_declaradas;
+                info_filho->estado_atual = EST_PRONTO; // Filho começa pronto
+
+                info_filho->pc = proximo_pc_candidato; // Filho começa na instrução seguinte à 'F'
+                p->pc = proximo_pc_candidato + instr.arg1; // Pai avança PC conforme argumento de 'F'
+
+                *novo_processo_filho_ptr = info_filho;
+                printf("[Pai PID %d] Criou filho. Pai PC -> %d, Filho PC -> %d.\n", p->pid, p->pc, info_filho->pc);
+                return; 
 }
         case 'R': // Substitui o programa do processo atual
             {
-                printf("[PID %d] Substituindo programa por %s\n", p->pid, instr.nome_arquivo_R);
-                psCarregarProgramaDeArquivo(p, instr.nome_arquivo_R);
-                return; // PC foi resetado para 0 (ou processo terminou)
+                                printf("[PID %d] Substituindo programa por %s.\n", p->pid, instr.nome_arquivo_R);
+                char nome_arq_temp[MAX_NOME_ARQUIVO_R]; // Salva nome antes de psCarregar
+                strncpy(nome_arq_temp, instr.nome_arquivo_R, MAX_NOME_ARQUIVO_R - 1);
+                nome_arq_temp[MAX_NOME_ARQUIVO_R - 1] = '\0';
+
+                psCarregarProgramaDeArquivo(p, nome_arq_temp); // Reseta PC para 0, memória, etc.
+                                                          // Estado e prioridade não mudam
+                // Se psCarregarProgramaDeArquivo falhar, ele pode setar estado para TERMINADO
+                printf("[PID %d] Programa substituído. Novo PC: %d.\n",p->pid, p->pc);
+                return; // PC e programa alterados, retorna
             }
             break;
             
         default: // Instrução desconhecida
-            printf("[PID %d] Instrução desconhecida '%c'\n", p->pid, instr.tipoInstrucaoChar);
+           printf("[PID %d] Instrução desconhecida '%c'. Terminando.\n", p->pid, instr.tipoInstrucaoChar);
             p->estado_atual = EST_TERMINADO;
+            p->pc = proximo_pc_candidato; // Salva o próximo PC ANTES de retornar
             return;
     }
 
-    // Avança o PC se não foi uma instrução de salto e o processo continua em execução
-    if (!pc_foi_alterado_por_salto && p->estado_atual == EST_EXECUCAO) {
-        p->pc++;
-        printf("[DEBUG] PC incrementado para %d (tamanho lista: %d)\n", 
-               p->pc, p->listaInstrucoes.tamanho);
+    if (p->estado_atual == EST_EXECUCAO) { // Garante que o processo ainda está "executando"
+        p->pc = proximo_pc_candidato;
     }
 }
 

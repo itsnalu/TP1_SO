@@ -31,13 +31,16 @@ typedef struct GerenciadorDeProcessos_s {
     long acumulador_tempo_de_vida_processos_concluidos;
     int total_processos_concluidos;
 
-    pthread_mutex_t mutex_cpu;        // Mutex para acesso à CPU
-    pthread_mutex_t mutex_fila_prontos; // Mutex para fila de prontos
-    pthread_mutex_t mutex_fila_bloqueados; // Mutex para fila de bloqueados
+    // Mutexes e Semáforos
+    pthread_mutex_t mutex_geral_gerenciador; // Novo: para operações críticas no gerenciador
+    pthread_mutex_t mutex_cpu;        // Mutex para acesso à CPU (se ainda relevante com threads)
+    pthread_mutex_t mutex_fila_prontos; // Para acesso à fila de prontos
+    pthread_mutex_t mutex_fila_bloqueados; // Para acesso à fila de bloqueados
     sem_t sem_impressao;             // Semáforo para controle de impressão
 
-    // Comunicação entre threads
-    ThreadComunicacao_t comunicacao;
+    // Comunicação Gerenciador <-> Threads de Processo
+    ThreadComunicacao_t comunicacao_gerenciador_processos; // Renomeada da sua 'comunicacao'                                                     // Usada pelo Gerenciador para esperar a thread do processo
+    int simulacao_terminando; // Flag para todas as threads encerrarem
 } GerenciadorDeProcessos_t;
 
 
@@ -56,6 +59,7 @@ void* executarImpressaoThread(void* arg);
 // Funções de escalonamento com threads
 void escalonarProcessosThreads(GerenciadorDeProcessos_t* gerenciador);
 void executarUnidadeTempo(GerenciadorDeProcessos_t* gerenciador);
+void escalonarProcessosFIFOThreads(GerenciadorDeProcessos_t *gerenciador);
 
 // Funções do gerenciador de processos
 //função que cria um novo processo simulado
