@@ -76,5 +76,8 @@ void trocarContexto(GerenciadorDeProcessos_t *gerenciador);
 void gerenciadorProcessosSimulados(int fd_read, ProcessoSimulado_t *processo_inicial);
 // Atribui um PID a um processo simulado
 void atribuirPidAoProcesso(GerenciadorDeProcessos_t *gerenciador, ProcessoSimulado_t *processo);
+//Pega e retona a prioridadde
+int get_quantum_for_priority(int priority);
+
 
 #endif // GERENCIADOR_H

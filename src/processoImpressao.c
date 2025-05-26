@@ -57,11 +57,11 @@ void processoImpressaoImprimirEstado(ProcessoImpressao_t *impressao) {
 
     printf("\n\n┌───── CPU ──────────────────────┐");
     if (impressao->gerenciador->cpu_sistema.processo_atual) {
-        ProcessoSimulado_t *proc_atual = impressao->gerenciador->cpu_sistema.processo_atual;
-        printf("\n│ Processo Atual: PID %-10d │", proc_atual->pid);
-        printf("\n│ PC: %-26d │", proc_atual->pc);
-        printf("\n│ Quantum Total: %-15d │", impressao->gerenciador->cpu_sistema.quantum_total_alocado);
-        printf("\n│ Tempo Executado: %-13d │", impressao->gerenciador->cpu_sistema.tempo_executado_neste_quantum);
+        ProcessoSimulado_t *proc_atual_na_cpu = impressao->gerenciador->cpu_sistema.processo_atual;
+        printf("\n│ Processo Atual: PID %-10d │", proc_atual_na_cpu->pid);
+        printf("\n│ PC: %-26d │", proc_atual_na_cpu->pc);
+        printf("\n│ Quantum Total: %-15d │", get_quantum_for_priority(proc_atual_na_cpu->prioridade)); // Certifique-se que get_quantum_for_priority está acessível
+        printf("\n│ Tempo Executado: %-13d │", proc_atual_na_cpu->tempo_usado_no_quantum_atual); // <--- CORREÇÃO AQUI
     } else {
         printf("\n│          CPU OCIOSA            │");
     }

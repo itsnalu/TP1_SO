@@ -148,7 +148,6 @@ void* executarProcessoThread(void* arg) {
 
         // Sinalizar ao Gerenciador que esta fatia de tempo/instrução terminou
         pthread_mutex_lock(&gerenciador->comunicacao_gerenciador_processos.mutex);
-        gerenciador->cpu_sistema.processo_atual = NULL; // CPU está conceitualmente livre para escalonamento
         gerenciador->comunicacao_gerenciador_processos.comando_recebido = processo->pid + 1; // Informa qual PID (ou apenas um flag)
         pthread_cond_signal(&gerenciador->comunicacao_gerenciador_processos.cond);
         pthread_mutex_unlock(&gerenciador->comunicacao_gerenciador_processos.mutex);
